@@ -40,6 +40,9 @@ class ICloudSync:
         # Cookie/session directory for icloudpd
         self.cookie_dir = Path.home() / '.pyicloud'
         
+        # Find icloudpd binary (in venv or system)
+        self._icloudpd_bin = self._find_icloudpd()
+        
         # Status tracking
         self._auth_status = AuthStatus.NOT_CONFIGURED
         self._last_sync: Optional[datetime] = None
@@ -49,6 +52,29 @@ class ICloudSync:
         # Ensure directories exist
         self.download_dir.mkdir(parents=True, exist_ok=True)
         self.cookie_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _find_icloudpd(self) -> str:
+        """Find the icloudpd binary path."""
+        # Check in virtual environment first
+        venv_paths = [
+            Path(__file__).parent.parent / 'venv' / 'bin' / 'icloudpd',
+            Path.home() / 'photoframe' / 'venv' / 'bin' / 'icloudpd',
+        ]
+        
+        for venv_path in venv_paths:
+            if venv_path.exists():
+                logger.info(f"Found icloudpd at: {venv_path}")
+                return str(venv_path)
+        
+        # Check if it's in system PATH
+        result = shutil.which('icloudpd')
+        if result:
+            logger.info(f"Found icloudpd in PATH: {result}")
+            return result
+        
+        # Default to just 'icloudpd' and hope for the best
+        logger.warning("icloudpd not found in venv or PATH, using 'icloudpd'")
+        return 'icloudpd'
     
     @property
     def auth_status(self) -> AuthStatus:
@@ -80,7 +106,7 @@ class ICloudSync:
             # Try a dry-run to check auth status
             result = subprocess.run(
                 [
-                    'icloudpd',
+                    self._icloudpd_bin,
                     '--username', self.username,
                     '--directory', str(self.download_dir),
                     '--cookie-directory', str(self.cookie_dir),
@@ -112,7 +138,7 @@ class ICloudSync:
             self._last_error = "Authentication check timed out"
         except FileNotFoundError:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
-            self._last_error = "icloudpd not installed. Run: pip install icloudpd"
+            self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'. Run: source ~/photoframe/venv/bin/activate && pip install icloudpd"
         except Exception as e:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = str(e)
@@ -136,7 +162,7 @@ class ICloudSync:
         try:
             # Build command
             cmd = [
-                'icloudpd',
+                self._icloudpd_bin,
                 '--username', self.username,
                 '--password', password,
                 '--directory', str(self.download_dir),
@@ -203,7 +229,7 @@ class ICloudSync:
             
             # Build sync command
             cmd = [
-                'icloudpd',
+                self._icloudpd_bin,
                 '--username', self.username,
                 '--directory', str(self.download_dir),
                 '--cookie-directory', str(self.cookie_dir),
