@@ -136,8 +136,15 @@ class ConfigManager:
             },
             'paths': {
                 'ready_dir': '~/photos/ready',
+                'thumbnails_dir': '~/photos/thumbnails',
                 'lib_dir': './lib',
                 'state_file': '~/.photoframe/state.json',
+            },
+            'thumbnails': {
+                'width': 200,
+                'height': 120,
+                'quality': 85,
+                'format': 'webp',  # webp or jpeg
             },
         }
     

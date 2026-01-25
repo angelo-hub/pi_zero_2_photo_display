@@ -160,10 +160,37 @@ def convert_photos():
     })
 
 
+@app.route('/photos/backfill-thumbnails', methods=['POST'])
+@auth_required
+def backfill_thumbnails():
+    """Generate thumbnails for existing images that don't have one."""
+    generated, errors = image_converter.backfill_thumbnails()
+    return jsonify({
+        'success': True,
+        'generated': generated,
+        'errors': errors,
+        'message': f'Generated {generated} thumbnails ({errors} errors)'
+    })
+
+
 @app.route('/photos/preview/<path:filename>')
 @auth_required
 def photo_preview(filename):
-    """Serve photo preview."""
+    """Serve photo preview thumbnail (or full image if no thumbnail)."""
+    # Try to serve thumbnail first (much smaller, faster loading)
+    thumb_path = image_converter.get_thumbnail_path(filename)
+    if thumb_path and thumb_path.exists():
+        return send_from_directory(thumb_path.parent, thumb_path.name)
+    
+    # Fall back to full image if no thumbnail
+    ready_dir = config.get_path('paths.ready_dir')
+    return send_from_directory(ready_dir, filename)
+
+
+@app.route('/photos/full/<path:filename>')
+@auth_required
+def photo_full(filename):
+    """Serve full-size converted image."""
     ready_dir = config.get_path('paths.ready_dir')
     return send_from_directory(ready_dir, filename)
 

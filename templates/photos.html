@@ -16,6 +16,9 @@
         <button class="btn btn-secondary" onclick="convertPhotos()">
             🎨 Convert All New
         </button>
+        <button class="btn btn-secondary" onclick="backfillThumbnails()" title="Generate missing thumbnails for faster gallery loading">
+            🖼️ Generate Thumbnails
+        </button>
     </div>
     <div class="toolbar-right">
         <span class="stats-badge">
@@ -120,6 +123,24 @@ async function convertPhotos() {
         setTimeout(() => location.reload(), 2000);
     } catch (error) {
         showNotification('Conversion failed', 'error');
+    }
+}
+
+async function backfillThumbnails() {
+    showNotification('Generating thumbnails for faster gallery loading...', 'info');
+    
+    try {
+        const response = await fetch('/photos/backfill-thumbnails', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.generated > 0) {
+            showNotification(`Generated ${data.generated} thumbnails (${data.errors} errors)`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification('All thumbnails already exist', 'info');
+        }
+    } catch (error) {
+        showNotification('Thumbnail generation failed', 'error');
     }
 }
 

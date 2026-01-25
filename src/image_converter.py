@@ -54,9 +54,17 @@ class ImageConverter:
         
         self.source_dir = config.get_path('icloud.download_dir')
         self.ready_dir = config.get_path('paths.ready_dir')
+        self.thumbnails_dir = config.get_path('paths.thumbnails_dir')
         
-        # Ensure ready directory exists
+        # Thumbnail settings
+        self.thumb_width = config.get('thumbnails.width', 200)
+        self.thumb_height = config.get('thumbnails.height', 120)
+        self.thumb_quality = config.get('thumbnails.quality', 85)
+        self.thumb_format = config.get('thumbnails.format', 'webp').lower()
+        
+        # Ensure directories exist
         self.ready_dir.mkdir(parents=True, exist_ok=True)
+        self.thumbnails_dir.mkdir(parents=True, exist_ok=True)
         
         # Create palette image for quantization
         self._palette_image = Image.new("P", (1, 1))
@@ -168,6 +176,9 @@ class ImageConverter:
             self._conversion_cache[file_hash] = str(output_path)
             self._save_cache()
             
+            # Generate thumbnail for gallery preview
+            self._generate_thumbnail(output_path)
+            
             logger.info(f"Converted: {source_path.name} -> {output_name}")
             return output_path
             
@@ -244,6 +255,120 @@ class ImageConverter:
         img = img.crop((left, top, right, bottom))
         
         return img
+    
+    def _generate_thumbnail(self, ready_path: Path) -> Optional[Path]:
+        """
+        Generate a thumbnail for a converted image.
+        
+        Args:
+            ready_path: Path to the ready (converted) image
+            
+        Returns:
+            Path to thumbnail, or None on failure
+        """
+        try:
+            # Determine thumbnail filename and path
+            if self.thumb_format == 'webp':
+                thumb_name = ready_path.stem + '.webp'
+            else:
+                thumb_name = ready_path.stem + '.jpg'
+            
+            thumb_path = self.thumbnails_dir / thumb_name
+            
+            # Skip if thumbnail already exists and is newer than source
+            if thumb_path.exists():
+                if thumb_path.stat().st_mtime >= ready_path.stat().st_mtime:
+                    return thumb_path
+            
+            # Load the ready image
+            img = Image.open(ready_path)
+            
+            # Resize to thumbnail size (maintain aspect ratio, fit within bounds)
+            img.thumbnail((self.thumb_width, self.thumb_height), Image.Resampling.LANCZOS)
+            
+            # Convert to RGB if necessary (for JPEG/WebP compatibility)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Save thumbnail
+            if self.thumb_format == 'webp':
+                img.save(thumb_path, 'WEBP', quality=self.thumb_quality)
+            else:
+                img.save(thumb_path, 'JPEG', quality=self.thumb_quality, optimize=True)
+            
+            logger.debug(f"Generated thumbnail: {thumb_name}")
+            return thumb_path
+            
+        except Exception as e:
+            logger.warning(f"Could not generate thumbnail for {ready_path.name}: {e}")
+            return None
+    
+    def get_thumbnail_path(self, ready_filename: str) -> Optional[Path]:
+        """
+        Get the thumbnail path for a ready image filename.
+        
+        Args:
+            ready_filename: Filename of the ready image (e.g., 'photo_20240101.png')
+            
+        Returns:
+            Path to thumbnail if exists, None otherwise
+        """
+        stem = Path(ready_filename).stem
+        
+        # Check for webp first, then jpg
+        webp_path = self.thumbnails_dir / f"{stem}.webp"
+        jpg_path = self.thumbnails_dir / f"{stem}.jpg"
+        
+        if webp_path.exists():
+            return webp_path
+        elif jpg_path.exists():
+            return jpg_path
+        
+        return None
+    
+    def backfill_thumbnails(self) -> Tuple[int, int]:
+        """
+        Generate thumbnails for all existing ready images that don't have one.
+        
+        Returns:
+            Tuple of (generated_count, error_count)
+        """
+        import gc
+        
+        generated = 0
+        errors = 0
+        
+        ready_images = self.get_ready_images()
+        total = len(ready_images)
+        
+        logger.info(f"Backfilling thumbnails for {total} images...")
+        
+        for i, ready_path in enumerate(ready_images, 1):
+            try:
+                # Check if thumbnail already exists
+                existing = self.get_thumbnail_path(ready_path.name)
+                if existing:
+                    continue
+                
+                # Generate thumbnail
+                result = self._generate_thumbnail(ready_path)
+                if result:
+                    generated += 1
+                    if generated % 10 == 0:
+                        logger.info(f"Generated {generated} thumbnails...")
+                else:
+                    errors += 1
+                
+                # Free memory periodically
+                if i % 20 == 0:
+                    gc.collect()
+                    
+            except Exception as e:
+                errors += 1
+                logger.warning(f"Error generating thumbnail for {ready_path.name}: {e}")
+        
+        logger.info(f"Thumbnail backfill complete: {generated} generated, {errors} errors")
+        return generated, errors
     
     def convert_all_new(self, delay_seconds: float = None) -> Tuple[int, int]:
         """
@@ -376,12 +501,22 @@ class ImageConverter:
     def get_status(self) -> dict:
         """Get converter status for web UI."""
         ready_images = self.get_ready_images()
+        
+        # Count thumbnails
+        thumb_count = 0
+        if self.thumbnails_dir.exists():
+            thumb_count = len(list(self.thumbnails_dir.glob('*.webp'))) + \
+                         len(list(self.thumbnails_dir.glob('*.jpg')))
+        
         return {
             'ready_count': len(ready_images),
             'ready_dir': str(self.ready_dir),
             'target_size': f"{self.width}x{self.height}",
             'orientation': self.orientation,
             'cache_entries': len(self._conversion_cache),
+            'thumbnail_count': thumb_count,
+            'thumbnails_dir': str(self.thumbnails_dir),
+            'thumb_size': f"{self.thumb_width}x{self.thumb_height}",
         }
 
 
