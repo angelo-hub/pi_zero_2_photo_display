@@ -37,27 +37,13 @@ cd pi_zero_2_photo_display
 ./scripts/install.sh
 ```
 
-### 3. Configure
-
-Edit the configuration file:
-
-```bash
-nano ~/photoframe/config/config.local.yaml
-```
-
-Set your iCloud username and shared album name:
-
-```yaml
-icloud:
-  username: "your.email@icloud.com"
-  album: "Photo Frame"
-```
-
-### 4. Reboot & Start
+### 3. Reboot
 
 ```bash
 sudo reboot
 ```
+
+### 4. Configure via Web UI
 
 After reboot, the service starts automatically. Access the web UI at:
 
@@ -65,13 +51,19 @@ After reboot, the service starts automatically. Access the web UI at:
 http://photoframe.local:8080
 ```
 
-### 5. Authenticate iCloud
+**No manual file editing required!** Configure everything through the web interface:
 
-Visit the web UI and go to **iCloud** to authenticate with your Apple ID.
+1. **Settings** → Enter your iCloud email and album name
+2. **iCloud** → Authenticate with your password and 2FA code
+3. **System** → Add additional WiFi networks if needed
+
+That's it! Photos will start syncing and displaying automatically.
 
 ## Configuration
 
-All settings are in `config/config.yaml`. Create `config/config.local.yaml` for your overrides.
+**All settings are configurable via the Web UI** at `Settings`. No need to edit files manually!
+
+Settings are stored in `config/config.yaml` and `config/config.local.yaml`.
 
 ### Key Settings
 
@@ -98,9 +90,10 @@ Access at `http://photoframe.local:8080`:
 
 - **Dashboard** - System overview and quick controls
 - **Photos** - View and manage your photo library
-- **Display** - Control the e-Paper display
+- **Display** - Control the e-Paper display (next, previous, pause, favorites)
 - **iCloud** - Authenticate and manage sync
-- **Settings** - Configure all options
+- **System** - WiFi, reboot, logs, system info
+- **Settings** - Configure all options (no file editing needed!)
 
 ## Project Structure
 
@@ -128,6 +121,25 @@ photoframe/
 └── systemd/
     └── photoframe.service   # Systemd service file
 ```
+
+## Updating
+
+To update an existing installation:
+
+```bash
+cd ~/pi_zero_2_photo_display
+git pull
+./scripts/update.sh
+```
+
+The update script will:
+- Pull latest changes from git
+- Backup your configuration
+- Copy updated files (src, templates, static, lib)
+- Update Python dependencies
+- Restart the service
+
+Your `config.local.yaml` settings are preserved.
 
 ## Commands
 

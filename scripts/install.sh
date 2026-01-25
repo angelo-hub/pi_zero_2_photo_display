@@ -112,30 +112,16 @@ deactivate
 
 echo -e "${GREEN}[7/8] Setting up configuration...${NC}"
 # Copy default config if not exists
-if [ ! -f "$INSTALL_DIR/config/config.yaml" ]; then
-    mkdir -p "$INSTALL_DIR/config"
-    if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
-        cp "$SCRIPT_DIR/config/config.yaml" "$INSTALL_DIR/config/"
-    fi
+mkdir -p "$INSTALL_DIR/config"
+if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
+    cp "$SCRIPT_DIR/config/config.yaml" "$INSTALL_DIR/config/"
 fi
 
-# Create local config for user customization
+# Create empty local config (will be populated via web UI)
 if [ ! -f "$INSTALL_DIR/config/config.local.yaml" ]; then
     cat > "$INSTALL_DIR/config/config.local.yaml" << 'EOF'
-# Local configuration overrides
-# Uncomment and modify settings as needed
-
-icloud:
-  # Your Apple ID
-  username: ""
-  # Shared album name
-  album: "Photo Frame"
-
-# display:
-#   rotation_interval: 3600  # 1 hour
-
-# button:
-#   gpio_pin: 4  # Check your board for correct pin
+# Local configuration - managed via Web UI
+# Visit http://photoframe.local:8080/settings to configure
 EOF
 fi
 
@@ -177,24 +163,22 @@ echo "╚═══════════════════════�
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Edit your configuration:"
-echo "   nano $INSTALL_DIR/config/config.local.yaml"
-echo ""
-echo "2. Set your iCloud username and album name"
-echo ""
-echo "3. Reboot to enable SPI and I2C:"
+echo "1. Reboot to enable SPI and I2C:"
 echo "   sudo reboot"
 echo ""
-echo "4. After reboot, start the service:"
-echo "   sudo systemctl start photoframe"
-echo ""
-echo "5. Access the web UI at:"
+echo "2. After reboot, access the web UI at:"
 echo "   http://$(hostname).local:8080"
 echo "   or"
 echo "   http://$(hostname -I | awk '{print $1}'):8080"
 echo ""
+echo "3. Configure everything via the web UI:"
+echo "   - Go to Settings → Set your iCloud email and album name"
+echo "   - Go to iCloud → Enter password and 2FA code"
+echo "   - Go to System → Add WiFi networks if needed"
+echo ""
+echo "   No manual file editing required! 🎉"
+echo ""
 echo "To view logs:"
 echo "   journalctl -u photoframe -f"
-echo "   or"
-echo "   tail -f $LOG_DIR/photoframe.log"
+echo "   or via Web UI: System → Logs"
 echo ""

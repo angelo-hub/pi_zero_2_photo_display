@@ -404,14 +404,46 @@ def update_settings():
     # Handle form data
     updates = request.form.to_dict()
     
-    # Update config (basic implementation)
+    # Track which checkbox fields exist (they don't send value when unchecked)
+    checkbox_fields = [
+        'button.enabled',
+        'battery.enabled', 
+        'quiet_hours.enabled',
+        'quiet_hours.disable_button',
+        'web.auth_enabled',
+    ]
+    
+    # Set unchecked checkboxes to False
+    for field in checkbox_fields:
+        if field not in updates:
+            config.set(field, False)
+    
+    # Update config with proper type conversion
     for key, value in updates.items():
         if '.' in key:
-            # Handle checkboxes (they don't send value when unchecked)
-            config.set(key, value)
+            # Convert types appropriately
+            if key in checkbox_fields:
+                # Checkbox: any value means True
+                config.set(key, True)
+            elif value.isdigit():
+                # Integer
+                config.set(key, int(value))
+            elif value.replace('.', '', 1).isdigit():
+                # Float
+                config.set(key, float(value))
+            elif value.lower() in ('true', 'false'):
+                # Boolean string
+                config.set(key, value.lower() == 'true')
+            else:
+                # String
+                config.set(key, value)
     
     config.save()
-    flash('Settings saved', 'success')
+    
+    # Reload icloud_sync with new settings
+    icloud_sync.__init__()
+    
+    flash('Settings saved! Some changes may require a service restart.', 'success')
     return redirect(url_for('settings_page'))
 
 
