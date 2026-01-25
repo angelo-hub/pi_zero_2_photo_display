@@ -37,7 +37,39 @@ PHOTOS_DIR="$HOME/photos"
 CONFIG_DIR="$HOME/.photoframe"
 LOG_DIR="/var/log/photoframe"
 
-echo -e "${GREEN}[1/8] Creating directories...${NC}"
+# Detect architecture
+ARCH=$(uname -m)
+echo -e "${GREEN}Detected architecture: ${ARCH}${NC}"
+
+echo -e "${GREEN}[1/9] Setting up swap for Pi Zero 2 W...${NC}"
+# Pi Zero 2 W has only 512MB RAM, needs more swap for installations
+CURRENT_SWAP=$(free -m | awk '/^Swap:/ {print $2}')
+if [ "$CURRENT_SWAP" -lt 1024 ]; then
+    echo "  Current swap: ${CURRENT_SWAP}MB, increasing to 1GB..."
+    
+    # Disable existing swap if any
+    sudo swapoff -a 2>/dev/null || true
+    
+    # Remove old swapfile if exists
+    sudo rm -f /swapfile 2>/dev/null || true
+    
+    # Create 1GB swap file
+    sudo dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    
+    # Make permanent
+    if ! grep -q "/swapfile" /etc/fstab; then
+        echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+    fi
+    
+    echo "  ✓ Swap increased to 1GB"
+else
+    echo "  ✓ Swap already adequate (${CURRENT_SWAP}MB)"
+fi
+
+echo -e "${GREEN}[2/9] Creating directories...${NC}"
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$PHOTOS_DIR/raw"
 mkdir -p "$PHOTOS_DIR/ready"
@@ -45,11 +77,11 @@ mkdir -p "$CONFIG_DIR"
 sudo mkdir -p "$LOG_DIR"
 sudo chown $USER:$USER "$LOG_DIR"
 
-echo -e "${GREEN}[2/8] Updating system packages...${NC}"
+echo -e "${GREEN}[3/9] Updating system packages...${NC}"
 sudo apt-get update
 sudo apt-get upgrade -y
 
-echo -e "${GREEN}[3/8] Installing system dependencies...${NC}"
+echo -e "${GREEN}[4/9] Installing system dependencies...${NC}"
 sudo apt-get install -y \
     python3-pip \
     python3-dev \
@@ -66,21 +98,25 @@ sudo apt-get install -y \
     libopenjp2-7-dev \
     libtiff-dev \
     git \
+    wget \
     wireless-tools
 
-echo -e "${GREEN}[4/8] Enabling SPI and I2C interfaces...${NC}"
-# Enable SPI
-if ! grep -q "^dtparam=spi=on" /boot/config.txt; then
-    echo "dtparam=spi=on" | sudo tee -a /boot/config.txt
+echo -e "${GREEN}[5/9] Enabling SPI and I2C interfaces...${NC}"
+# Enable SPI (check both /boot/config.txt and /boot/firmware/config.txt)
+CONFIG_FILE="/boot/config.txt"
+if [ -f "/boot/firmware/config.txt" ]; then
+    CONFIG_FILE="/boot/firmware/config.txt"
 fi
 
-# Enable I2C
-if ! grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
-    echo "dtparam=i2c_arm=on" | sudo tee -a /boot/config.txt
+if ! grep -q "^dtparam=spi=on" "$CONFIG_FILE"; then
+    echo "dtparam=spi=on" | sudo tee -a "$CONFIG_FILE"
 fi
 
-echo -e "${GREEN}[5/8] Copying project files...${NC}"
-# Assuming script is run from project directory
+if ! grep -q "^dtparam=i2c_arm=on" "$CONFIG_FILE"; then
+    echo "dtparam=i2c_arm=on" | sudo tee -a "$CONFIG_FILE"
+fi
+
+echo -e "${GREEN}[6/9] Copying project files...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
@@ -94,32 +130,53 @@ if [ -d "$SCRIPT_DIR/Waveshare_E-Paper/lib/waveshare_epd" ]; then
     cp -r "$SCRIPT_DIR/Waveshare_E-Paper/lib/waveshare_epd" "$INSTALL_DIR/lib/"
 fi
 
-echo -e "${GREEN}[6/8] Setting up Python virtual environment...${NC}"
+echo -e "${GREEN}[7/9] Setting up Python virtual environment...${NC}"
 # Use --system-site-packages to access apt-installed packages (gpiozero, spidev, etc.)
 python3 -m venv --system-site-packages "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
 
-# Upgrade pip
-pip install --upgrade pip 2>/dev/null || pip install --break-system-packages --upgrade pip
+# Upgrade pip and install build tools
+pip install --upgrade pip setuptools wheel 2>/dev/null || \
+    pip install --break-system-packages --upgrade pip setuptools wheel
 
 # Install Python dependencies
-# Note: Some packages may already be available via system, pip will skip them
 echo -e "${GREEN}Installing Python packages (this may take a while on Pi Zero)...${NC}"
 
-# Try installing, with fallback for Bookworm's externally-managed-environment
+# Install icloudpd separately with special handling
+echo "  Installing icloudpd (may take several minutes)..."
+if pip install icloudpd; then
+    echo "  ✓ icloudpd installed"
+elif pip install --break-system-packages icloudpd; then
+    echo "  ✓ icloudpd installed (with --break-system-packages)"
+elif pip install --break-system-packages --no-binary :all: icloudpd; then
+    echo "  ✓ icloudpd installed from source"
+else
+    echo -e "${YELLOW}  Trying icloudpd from GitHub...${NC}"
+    pip install --break-system-packages "git+https://github.com/icloud-photos-downloader/icloud_photos_downloader.git@v1.23.4" || \
+        echo -e "${RED}  Warning: icloudpd installation failed. You may need to install manually.${NC}"
+fi
+
+# Install remaining dependencies
+echo "  Installing other packages..."
 if pip install -r "$INSTALL_DIR/requirements.txt"; then
     echo "  ✓ Packages installed"
 elif pip install --break-system-packages -r "$INSTALL_DIR/requirements.txt"; then
     echo "  ✓ Packages installed (with --break-system-packages)"
 else
     echo -e "${YELLOW}Trying individual critical packages...${NC}"
-    pip install --break-system-packages icloudpd Flask APScheduler PyYAML Pillow requests numpy || true
+    pip install --break-system-packages Flask APScheduler PyYAML Pillow requests numpy || true
+fi
+
+# Verify icloudpd is available
+if command -v icloudpd &>/dev/null || [ -f "$INSTALL_DIR/venv/bin/icloudpd" ]; then
+    echo "  ✓ icloudpd verified"
+else
+    echo -e "${YELLOW}  Note: icloudpd may need manual installation after reboot${NC}"
 fi
 
 deactivate
 
-echo -e "${GREEN}[7/8] Setting up configuration...${NC}"
-# Copy default config if not exists
+echo -e "${GREEN}[8/9] Setting up configuration...${NC}"
 mkdir -p "$INSTALL_DIR/config"
 if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
     cp "$SCRIPT_DIR/config/config.yaml" "$INSTALL_DIR/config/"
@@ -133,8 +190,7 @@ if [ ! -f "$INSTALL_DIR/config/config.local.yaml" ]; then
 EOF
 fi
 
-echo -e "${GREEN}[8/8] Installing systemd service...${NC}"
-# Create service file with correct paths
+echo -e "${GREEN}[9/9] Installing systemd service...${NC}"
 cat > /tmp/photoframe.service << EOF
 [Unit]
 Description=Photo Frame Service
@@ -166,7 +222,7 @@ sudo systemctl enable photoframe.service
 
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗"
-echo "║           Installation Complete! 🎉                         ║"
+echo "║           Installation Complete! ✓                          ║"
 echo "╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Next steps:"
@@ -183,8 +239,6 @@ echo "3. Configure everything via the web UI:"
 echo "   - Go to Settings → Set your iCloud email and album name"
 echo "   - Go to iCloud → Enter password and 2FA code"
 echo "   - Go to System → Add WiFi networks if needed"
-echo ""
-echo "   No manual file editing required! 🎉"
 echo ""
 echo "To view logs:"
 echo "   journalctl -u photoframe -f"

@@ -55,7 +55,18 @@ class ICloudSync:
     
     def _find_icloudpd(self) -> str:
         """Find the icloudpd binary path."""
-        # Check in virtual environment first
+        # Check for pre-built binary first (recommended for Pi Zero 2 W)
+        binary_paths = [
+            Path(__file__).parent.parent / 'bin' / 'icloudpd',
+            Path.home() / 'photoframe' / 'bin' / 'icloudpd',
+        ]
+        
+        for bin_path in binary_paths:
+            if bin_path.exists():
+                logger.info(f"Found icloudpd binary at: {bin_path}")
+                return str(bin_path)
+        
+        # Check in virtual environment (pip install)
         venv_paths = [
             Path(__file__).parent.parent / 'venv' / 'bin' / 'icloudpd',
             Path.home() / 'photoframe' / 'venv' / 'bin' / 'icloudpd',
@@ -73,7 +84,7 @@ class ICloudSync:
             return result
         
         # Default to just 'icloudpd' and hope for the best
-        logger.warning("icloudpd not found in venv or PATH, using 'icloudpd'")
+        logger.warning("icloudpd not found in bin/, venv, or PATH")
         return 'icloudpd'
     
     @property

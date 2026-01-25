@@ -1,8 +1,8 @@
 # iCloud Photo Frame - Dependencies
 # Pi Zero 2 W compatible (Raspberry Pi OS Bookworm)
 
-# iCloud photo download
-icloudpd>=1.17.0
+# iCloud photo download (installed separately in install.sh with special handling)
+# icloudpd>=1.17.0
 
 # Image processing
 Pillow>=10.0.0
