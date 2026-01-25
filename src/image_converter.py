@@ -239,13 +239,22 @@ class ImageConverter:
         
         return img
     
-    def convert_all_new(self) -> Tuple[int, int]:
+    def convert_all_new(self, delay_seconds: float = None) -> Tuple[int, int]:
         """
         Convert all new images from source directory.
+        
+        Args:
+            delay_seconds: Delay between conversions to avoid overloading Pi Zero
+                          (defaults to config value or 5 seconds)
         
         Returns:
             Tuple of (converted_count, error_count)
         """
+        import time
+        
+        if delay_seconds is None:
+            delay_seconds = config.get('conversion.delay_seconds', 5.0)
+        
         converted = 0
         errors = 0
         
@@ -258,16 +267,27 @@ class ImageConverter:
             source_images.extend(self.source_dir.glob(f'**/*{ext}'))
             source_images.extend(self.source_dir.glob(f'**/*{ext.upper()}'))
         
-        logger.info(f"Found {len(source_images)} source images")
-        
+        # Count how many need conversion
+        to_convert = []
         for source_path in source_images:
             needs_conv, _ = self._needs_conversion(source_path)
             if needs_conv:
-                result = self.convert_image(source_path)
-                if result:
-                    converted += 1
-                else:
-                    errors += 1
+                to_convert.append(source_path)
+        
+        total = len(to_convert)
+        logger.info(f"Found {len(source_images)} source images, {total} need conversion")
+        
+        for i, source_path in enumerate(to_convert, 1):
+            logger.info(f"Converting {i}/{total}: {source_path.name}")
+            result = self.convert_image(source_path)
+            if result:
+                converted += 1
+            else:
+                errors += 1
+            
+            # Delay between conversions to avoid overloading Pi Zero
+            if i < total and delay_seconds > 0:
+                time.sleep(delay_seconds)
         
         logger.info(f"Conversion complete: {converted} converted, {errors} errors")
         return converted, errors

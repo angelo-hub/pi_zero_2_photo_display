@@ -94,6 +94,23 @@
             </div>
         </div>
         
+        <!-- Image Conversion Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🖼️ Image Conversion</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Delay Between Conversions (seconds)</label>
+                    <input type="number" name="conversion.delay_seconds" 
+                           value="{{ config.conversion.delay_seconds if config.conversion else 5 }}" 
+                           class="form-input"
+                           min="0" max="60" step="1">
+                    <small class="form-help">Helps prevent overloading Pi Zero during batch conversion (0 = no delay)</small>
+                </div>
+            </div>
+        </div>
+        
         <!-- Button Settings -->
         <div class="card settings-section">
             <div class="card-header">

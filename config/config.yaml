@@ -53,6 +53,17 @@ display:
   hybrid_newest_percent: 70
 
 # =============================================================================
+# Image Conversion Settings
+# =============================================================================
+conversion:
+  # Delay between image conversions (seconds)
+  # Helps avoid overloading Pi Zero 2 W during batch conversion
+  delay_seconds: 5
+  
+  # JPEG quality for intermediate processing (not final output)
+  jpeg_quality: 85
+
+# =============================================================================
 # Button Settings
 # =============================================================================
 button:
