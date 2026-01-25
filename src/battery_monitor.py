@@ -220,8 +220,18 @@ class BatteryMonitor:
         if self._simulate:
             return True
         
+        # If not initialized (no sensor found), assume power is OK
+        if not self._initialized:
+            return True
+        
         # Update reading
         self.read_battery()
+        
+        # If voltage is ~0V, no battery is connected - running on USB power only
+        # This is fine for refresh, just means no battery backup
+        if self._voltage < 0.5:
+            logger.debug("No battery connected (0V) - running on USB power")
+            return True
         
         if self._percent < self.min_refresh_percent:
             logger.warning(f"Battery too low for refresh: {self._percent:.1f}%")
@@ -281,6 +291,10 @@ class BatteryMonitor:
     def get_status(self) -> dict:
         """Get battery monitor status for web UI."""
         status = self._get_cached_status()
+        
+        # Detect if running on USB power only (no battery)
+        usb_power_only = self._initialized and self._voltage < 0.5
+        
         status.update({
             'enabled': self.enabled,
             'initialized': self._initialized,
@@ -288,6 +302,8 @@ class BatteryMonitor:
             'min_refresh_percent': self.min_refresh_percent,
             'low_warning_percent': self.low_warning_percent,
             'can_refresh': self.can_refresh() if self._initialized else True,
+            'usb_power_only': usb_power_only,
+            'power_source': 'USB (no battery)' if usb_power_only else ('Battery' if self._initialized else 'Unknown'),
         })
         return status
 
