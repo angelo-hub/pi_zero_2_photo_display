@@ -46,6 +46,8 @@ class ImageConverter:
     """Converts images for e-Paper display."""
     
     def __init__(self):
+        import threading
+        
         self.width = config.get('display.width', 800)
         self.height = config.get('display.height', 480)
         self.orientation = config.get('display.orientation', 'landscape')
@@ -63,6 +65,10 @@ class ImageConverter:
         # Track converted images
         self._conversion_cache: dict = {}
         self._load_cache()
+        
+        # Lock to prevent concurrent conversions (important for Pi Zero memory)
+        self._conversion_lock = threading.Lock()
+        self._is_converting = False
     
     def _load_cache(self) -> None:
         """Load conversion cache from disk."""
@@ -252,49 +258,80 @@ class ImageConverter:
         """
         import time
         
-        if delay_seconds is None:
-            delay_seconds = config.get('conversion.delay_seconds', 5.0)
+        # Prevent concurrent conversions (critical for Pi Zero memory)
+        if self._is_converting:
+            logger.warning("Conversion already in progress, skipping")
+            return 0, 0
         
+        if not self._conversion_lock.acquire(blocking=False):
+            logger.warning("Could not acquire conversion lock, skipping")
+            return 0, 0
+        
+        self._is_converting = True
         converted = 0
         errors = 0
         
-        # Supported image extensions
-        extensions = {'.jpg', '.jpeg', '.png', '.heic', '.gif', '.bmp', '.webp'}
-        
-        # Get all source images
-        source_images = []
-        for ext in extensions:
-            source_images.extend(self.source_dir.glob(f'**/*{ext}'))
-            source_images.extend(self.source_dir.glob(f'**/*{ext.upper()}'))
-        
-        # Count how many need conversion
-        to_convert = []
-        for source_path in source_images:
-            needs_conv, _ = self._needs_conversion(source_path)
-            if needs_conv:
-                to_convert.append(source_path)
-        
-        total = len(to_convert)
-        logger.info(f"Found {len(source_images)} source images, {total} need conversion")
-        
-        import gc
-        
-        for i, source_path in enumerate(to_convert, 1):
-            logger.info(f"Converting {i}/{total}: {source_path.name}")
-            result = self.convert_image(source_path)
-            if result:
-                converted += 1
-            else:
-                errors += 1
+        try:
+            if delay_seconds is None:
+                delay_seconds = config.get('conversion.delay_seconds', 5.0)
             
-            # Free memory after each conversion (important for Pi Zero)
-            gc.collect()
+            # Supported image extensions
+            extensions = {'.jpg', '.jpeg', '.png', '.heic', '.gif', '.bmp', '.webp'}
             
-            # Delay between conversions to avoid overloading Pi Zero
-            if i < total and delay_seconds > 0:
-                time.sleep(delay_seconds)
+            # Get all source images
+            source_images = []
+            for ext in extensions:
+                source_images.extend(self.source_dir.glob(f'**/*{ext}'))
+                source_images.extend(self.source_dir.glob(f'**/*{ext.upper()}'))
+            
+            # Count how many need conversion
+            to_convert = []
+            for source_path in source_images:
+                needs_conv, _ = self._needs_conversion(source_path)
+                if needs_conv:
+                    to_convert.append(source_path)
+            
+            total = len(to_convert)
+            logger.info(f"Found {len(source_images)} source images, {total} need conversion")
+            
+            import gc
+            
+            for i, source_path in enumerate(to_convert, 1):
+                try:
+                    logger.info(f"Converting {i}/{total}: {source_path.name}")
+                    result = self.convert_image(source_path)
+                    if result:
+                        converted += 1
+                        logger.debug(f"Successfully converted {i}/{total}")
+                    else:
+                        errors += 1
+                        logger.warning(f"Failed to convert {i}/{total}: {source_path.name}")
+                except MemoryError:
+                    errors += 1
+                    logger.error(f"MemoryError converting {source_path.name} - skipping")
+                    gc.collect()
+                except Exception as e:
+                    errors += 1
+                    logger.error(f"Unexpected error converting {source_path.name}: {e}")
+                
+                # Free memory after each conversion (important for Pi Zero)
+                gc.collect()
+                
+                # Delay between conversions to avoid overloading Pi Zero
+                if i < total and delay_seconds > 0:
+                    logger.debug(f"Sleeping {delay_seconds}s before next conversion...")
+                    time.sleep(delay_seconds)
+            
+            logger.info(f"Conversion complete: {converted} converted, {errors} errors")
         
-        logger.info(f"Conversion complete: {converted} converted, {errors} errors")
+        except Exception as e:
+            logger.error(f"Batch conversion failed: {e}")
+        
+        finally:
+            # Always release lock
+            self._is_converting = False
+            self._conversion_lock.release()
+        
         return converted, errors
     
     def get_ready_images(self) -> List[Path]:
