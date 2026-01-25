@@ -109,13 +109,29 @@ class ICloudSync:
     
     def _has_valid_cookies(self) -> bool:
         """Check if iCloud session cookies exist."""
-        # icloudpd stores session in ~/.pyicloud/{username}
-        session_file = self.cookie_dir / self.username
-        if session_file.exists():
-            # Check if cookie file is recent (less than 30 days old)
-            import time
-            age_days = (time.time() - session_file.stat().st_mtime) / 86400
-            return age_days < 30
+        import re
+        import time
+        
+        # icloudpd sanitizes usernames for filenames (removes . and @)
+        sanitized_username = re.sub(r'[^a-zA-Z0-9]', '', self.username.lower())
+        
+        # Check both sanitized and original username patterns
+        possible_files = [
+            self.cookie_dir / sanitized_username,
+            self.cookie_dir / f"{sanitized_username}.session",
+            self.cookie_dir / self.username,
+            self.cookie_dir / self.username.replace('@', '').replace('.', ''),
+        ]
+        
+        for session_file in possible_files:
+            if session_file.exists():
+                # Check if cookie file is recent (less than 30 days old)
+                age_days = (time.time() - session_file.stat().st_mtime) / 86400
+                if age_days < 30:
+                    logger.debug(f"Found valid session cookie: {session_file}")
+                    return True
+        
+        logger.debug(f"No valid cookies found for {self.username}")
         return False
     
     def _sanitize_error(self, error: str) -> str:
