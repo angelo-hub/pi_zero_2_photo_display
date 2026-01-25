@@ -28,33 +28,60 @@ class ConfigManager:
         if not self._config:
             self.load_config()
     
-    def load_config(self, config_path: Optional[str] = None) -> None:
-        """Load configuration from YAML file."""
-        if config_path is None:
-            # Look for config in standard locations
-            base_dir = Path(__file__).parent.parent
-            possible_paths = [
-                base_dir / "config" / "config.local.yaml",  # User overrides
-                base_dir / "config" / "config.yaml",        # Default config
-                Path.home() / ".photoframe" / "config.yaml", # Home directory
-            ]
-            
-            for path in possible_paths:
-                if path.exists():
-                    config_path = str(path)
-                    break
+    def _deep_merge(self, base: dict, override: dict) -> dict:
+        """Deep merge two dictionaries, with override taking precedence."""
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
             else:
-                logger.warning("No config file found, using defaults")
-                self._config = self._get_defaults()
-                return
+                result[key] = value
+        return result
+    
+    def load_config(self, config_path: Optional[str] = None) -> None:
+        """Load configuration from YAML files, merging defaults with local overrides."""
+        base_dir = Path(__file__).parent.parent
         
-        try:
-            with open(config_path, 'r') as f:
-                self._config = yaml.safe_load(f)
-            logger.info(f"Loaded config from {config_path}")
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            self._config = self._get_defaults()
+        # Start with defaults
+        self._config = self._get_defaults()
+        
+        # Config file locations
+        default_config = base_dir / "config" / "config.yaml"
+        local_config = base_dir / "config" / "config.local.yaml"
+        home_config = Path.home() / ".photoframe" / "config.yaml"
+        
+        # Load default config first
+        if default_config.exists():
+            try:
+                with open(default_config, 'r') as f:
+                    loaded = yaml.safe_load(f) or {}
+                self._config = self._deep_merge(self._config, loaded)
+                logger.info(f"Loaded default config from {default_config}")
+            except Exception as e:
+                logger.error(f"Error loading default config: {e}")
+        
+        # Then merge local overrides
+        if local_config.exists():
+            try:
+                with open(local_config, 'r') as f:
+                    loaded = yaml.safe_load(f) or {}
+                self._config = self._deep_merge(self._config, loaded)
+                logger.info(f"Merged local config from {local_config}")
+            except Exception as e:
+                logger.error(f"Error loading local config: {e}")
+        
+        # Also check home directory config
+        if home_config.exists():
+            try:
+                with open(home_config, 'r') as f:
+                    loaded = yaml.safe_load(f) or {}
+                self._config = self._deep_merge(self._config, loaded)
+                logger.info(f"Merged home config from {home_config}")
+            except Exception as e:
+                logger.error(f"Error loading home config: {e}")
+        
+        # Store the local config path for saving
+        self._local_config_path = local_config
     
     def _get_defaults(self) -> dict:
         """Return default configuration values."""
@@ -150,17 +177,25 @@ class ConfigManager:
         config[keys[-1]] = value
     
     def save(self, config_path: Optional[str] = None) -> None:
-        """Save current configuration to file."""
+        """Save current configuration to local config file."""
         if config_path is None:
-            config_path = Path.home() / ".photoframe" / "config.yaml"
+            # Save to local config file (not default config)
+            config_path = getattr(self, '_local_config_path', None)
+            if config_path is None:
+                config_path = Path(__file__).parent.parent / "config" / "config.local.yaml"
         
         config_path = Path(config_path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(config_path, 'w') as f:
-            yaml.dump(self._config, f, default_flow_style=False)
+            yaml.dump(self._config, f, default_flow_style=False, sort_keys=False)
         
         logger.info(f"Saved config to {config_path}")
+    
+    def reload(self) -> None:
+        """Reload configuration from files."""
+        self._config = {}
+        self.load_config()
     
     @property
     def config(self) -> dict:

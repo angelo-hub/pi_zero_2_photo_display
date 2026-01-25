@@ -440,10 +440,11 @@ def update_settings():
     
     config.save()
     
-    # Reload icloud_sync with new settings
+    # Reload config and dependent modules
+    config.reload()
     icloud_sync.__init__()
     
-    flash('Settings saved! Some changes may require a service restart.', 'success')
+    flash('Settings saved successfully!', 'success')
     return redirect(url_for('settings_page'))
 
 
