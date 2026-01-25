@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Photos - Photo Frame{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Photo Library</h1>
+    <p class="subtitle">{{ total_count }} photos ready for display</p>
+</div>
+
+<div class="toolbar">
+    <div class="toolbar-left">
+        <button class="btn btn-primary" onclick="syncPhotos()">
+            🔄 Sync from iCloud
+        </button>
+        <button class="btn btn-secondary" onclick="convertPhotos()">
+            🎨 Convert All New
+        </button>
+    </div>
+    <div class="toolbar-right">
+        <span class="stats-badge">
+            Strategy: {{ selector_stats.strategy }}
+        </span>
+        <span class="stats-badge">
+            {{ selector_stats.newest_pool }} newest / {{ selector_stats.oldest_pool }} oldest
+        </span>
+    </div>
+</div>
+
+<div class="photo-grid">
+    {% for photo in photos %}
+    <div class="photo-card" data-filename="{{ photo.name }}">
+        <div class="photo-preview" onclick="displayPhoto('{{ photo.name }}')">
+            <img src="{{ url_for('photo_preview', filename=photo.name) }}" 
+                 alt="{{ photo.name }}"
+                 loading="lazy">
+            <div class="photo-overlay">
+                <span class="overlay-icon">🖼️</span>
+                <span>Display</span>
+            </div>
+        </div>
+        <div class="photo-info">
+            <span class="photo-name" title="{{ photo.name }}">{{ photo.name[:20] }}{% if photo.name|length > 20 %}...{% endif %}</span>
+            <button class="btn btn-small btn-primary" onclick="displayPhoto('{{ photo.name }}')">
+                Display
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📷</div>
+        {% if show_favorites %}
+        <h3>No Favorites Yet</h3>
+        <p>Mark photos as favorites from the Display page.</p>
+        <a href="{{ url_for('display_page') }}" class="btn btn-primary">
+            Go to Display
+        </a>
+        {% else %}
+        <h3>No Photos Yet</h3>
+        <p>Sync photos from iCloud or add them manually to get started.</p>
+        <button class="btn btn-primary" onclick="syncPhotos()">
+            Sync from iCloud
+        </button>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if total_count > 50 %}
+<div class="pagination-info">
+    <p>Showing 50 of {{ total_count }} photos</p>
+</div>
+{% endif %}
+
+<!-- Notifications -->
+<div id="notifications" class="notifications"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNotification(message, type = 'info') {
+    const container = document.getElementById('notifications');
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        ${message}
+        <button onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(notification);
+    setTimeout(() => notification.remove(), 5000);
+}
+
+async function syncPhotos() {
+    showNotification('Starting sync...', 'info');
+    
+    try {
+        const response = await fetch('/photos/sync', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(`Synced ${data.downloaded} photos, converted ${data.converted}`, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Sync failed', 'error');
+    }
+}
+
+async function convertPhotos() {
+    showNotification('Converting photos...', 'info');
+    
+    try {
+        const response = await fetch('/photos/convert', { method: 'POST' });
+        const data = await response.json();
+        
+        showNotification(`Converted ${data.converted} photos (${data.errors} errors)`, 'success');
+        setTimeout(() => location.reload(), 2000);
+    } catch (error) {
+        showNotification('Conversion failed', 'error');
+    }
+}
+
+async function displayPhoto(filename) {
+    showNotification(`Displaying ${filename}...`, 'info');
+    
+    try {
+        const response = await fetch('/display/specific', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(`Now displaying: ${data.photo}`, 'success');
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Display failed', 'error');
+    }
+}
+</script>
+{% endblock %}

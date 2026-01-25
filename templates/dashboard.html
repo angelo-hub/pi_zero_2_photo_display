@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Photo Frame{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Dashboard</h1>
+    <p class="subtitle">System overview and quick controls</p>
+</div>
+
+<div class="dashboard-grid">
+    <!-- iCloud Status Card -->
+    <div class="card status-card {% if icloud_status.auth_status == 'authenticated' %}status-ok{% elif icloud_status.auth_status == 'requires_2fa' %}status-warning{% else %}status-error{% endif %}">
+        <div class="card-header">
+            <h3>☁️ iCloud</h3>
+            <span class="status-badge">{{ icloud_status.auth_status }}</span>
+        </div>
+        <div class="card-body">
+            {% if icloud_status.configured %}
+                <p><strong>Account:</strong> {{ icloud_status.username }}</p>
+                <p><strong>Album:</strong> {{ icloud_status.album }}</p>
+                <p><strong>Photos:</strong> {{ icloud_status.photos_count }}</p>
+                {% if icloud_status.last_sync %}
+                    <p><strong>Last Sync:</strong> <span class="time-ago" data-time="{{ icloud_status.last_sync }}">{{ icloud_status.last_sync }}</span></p>
+                {% endif %}
+            {% else %}
+                <p class="text-muted">iCloud not configured</p>
+            {% endif %}
+        </div>
+        <div class="card-actions">
+            {% if icloud_status.auth_status == 'requires_2fa' %}
+                <a href="{{ url_for('auth_page') }}" class="btn btn-warning">Re-authenticate</a>
+            {% elif icloud_status.auth_status == 'authenticated' %}
+                <button class="btn btn-primary" onclick="syncPhotos()">Sync Now</button>
+            {% else %}
+                <a href="{{ url_for('auth_page') }}" class="btn btn-primary">Setup</a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Display Status Card -->
+    <div class="card status-card {% if display_status.initialized %}status-ok{% else %}status-warning{% endif %}">
+        <div class="card-header">
+            <h3>🖥️ Display</h3>
+            <span class="status-badge">{% if display_status.simulation_mode %}Simulation{% elif display_status.initialized %}Ready{% else %}Offline{% endif %}</span>
+        </div>
+        <div class="card-body">
+            <p><strong>Model:</strong> {{ display_status.model }}</p>
+            <p><strong>Resolution:</strong> {{ display_status.resolution }}</p>
+            {% if display_status.last_refresh %}
+                <p><strong>Last Refresh:</strong> <span class="time-ago" data-time="{{ display_status.last_refresh }}">{{ display_status.last_refresh }}</span></p>
+            {% endif %}
+            {% if display_status.is_sleeping %}
+                <p class="text-muted">Display is sleeping (power saving)</p>
+            {% endif %}
+        </div>
+        <div class="card-actions">
+            <button class="btn btn-primary" onclick="nextPhoto()">Next Photo</button>
+        </div>
+    </div>
+    
+    <!-- Battery Status Card -->
+    <div class="card status-card {% if battery_status.percent > 50 %}status-ok{% elif battery_status.percent > 20 %}status-warning{% else %}status-error{% endif %}">
+        <div class="card-header">
+            <h3>🔋 Battery</h3>
+            <span class="status-badge">{{ battery_status.percent|round(1) }}%</span>
+        </div>
+        <div class="card-body">
+            {% if battery_status.enabled %}
+                <div class="battery-bar">
+                    <div class="battery-level" style="width: {{ battery_status.percent }}%"></div>
+                </div>
+                <p><strong>Voltage:</strong> {{ battery_status.voltage }}V</p>
+                <p><strong>Power:</strong> {{ battery_status.power_w }}W</p>
+                {% if not battery_status.can_refresh %}
+                    <p class="text-error">⚠️ Battery too low for refresh</p>
+                {% endif %}
+            {% else %}
+                <p class="text-muted">Battery monitoring disabled</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Photo Stats Card -->
+    <div class="card status-card status-ok">
+        <div class="card-header">
+            <h3>📷 Photos</h3>
+            <span class="status-badge">
+                {% if selector_stats.paused %}⏸️ Paused{% else %}{{ converter_status.ready_count }} ready{% endif %}
+            </span>
+        </div>
+        <div class="card-body">
+            <p><strong>Current:</strong> {{ selector_stats.current_photo or 'None' }}</p>
+            <p><strong>Strategy:</strong> {{ selector_stats.strategy }}</p>
+            <p><strong>Favorites:</strong> {{ selector_stats.favorites_count }} ❤️</p>
+            <p><strong>History:</strong> {{ selector_stats.history_length }} viewed</p>
+        </div>
+        <div class="card-actions">
+            <a href="{{ url_for('photos_page') }}" class="btn btn-secondary">Manage Photos</a>
+            <a href="{{ url_for('display_page') }}" class="btn btn-secondary">Controls</a>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="section">
+    <h2>Quick Actions</h2>
+    <div class="action-buttons">
+        <button class="btn btn-large btn-primary" onclick="nextPhoto()">
+            <span class="btn-icon">⏭️</span>
+            Next Photo
+        </button>
+        <button class="btn btn-large btn-secondary" onclick="previousPhoto()">
+            <span class="btn-icon">⏮️</span>
+            Previous
+        </button>
+        <button class="btn btn-large {% if selector_stats.paused %}btn-primary{% else %}btn-warning{% endif %}" onclick="togglePause()" id="pauseBtn">
+            <span class="btn-icon" id="pauseIcon">{{ '▶️' if selector_stats.paused else '⏸️' }}</span>
+            <span id="pauseText">{{ 'Resume' if selector_stats.paused else 'Pause' }}</span>
+        </button>
+        <button class="btn btn-large btn-secondary" onclick="syncPhotos()">
+            <span class="btn-icon">🔄</span>
+            Sync iCloud
+        </button>
+    </div>
+</div>
+
+<!-- Notifications Area -->
+<div id="notifications" class="notifications"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNotification(message, type = 'info') {
+    const container = document.getElementById('notifications');
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        ${message}
+        <button onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => notification.remove(), 5000);
+}
+
+let isPaused = {{ 'true' if selector_stats.paused else 'false' }};
+
+async function nextPhoto() {
+    try {
+        const response = await fetch('/display/next', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(`Displaying: ${data.photo}`, 'success');
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to change photo', 'error');
+    }
+}
+
+async function previousPhoto() {
+    try {
+        const response = await fetch('/display/previous', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(`Showing: ${data.photo}`, 'success');
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to go back', 'error');
+    }
+}
+
+async function togglePause() {
+    try {
+        const response = await fetch('/display/pause', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            isPaused = data.paused;
+            const pauseBtn = document.getElementById('pauseBtn');
+            const pauseIcon = document.getElementById('pauseIcon');
+            const pauseText = document.getElementById('pauseText');
+            
+            if (pauseBtn) {
+                pauseBtn.classList.toggle('btn-primary', isPaused);
+                pauseBtn.classList.toggle('btn-warning', !isPaused);
+            }
+            if (pauseIcon) pauseIcon.textContent = isPaused ? '▶️' : '⏸️';
+            if (pauseText) pauseText.textContent = isPaused ? 'Resume' : 'Pause';
+            
+            showNotification(data.message, 'success');
+        }
+    } catch (error) {
+        showNotification('Failed to toggle pause', 'error');
+    }
+}
+
+async function syncPhotos() {
+    showNotification('Starting sync...', 'info');
+    
+    try {
+        const response = await fetch('/photos/sync', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(`Synced ${data.downloaded} photos, converted ${data.converted}`, 'success');
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Sync failed', 'error');
+    }
+}
+
+async function convertPhotos() {
+    showNotification('Converting photos...', 'info');
+    
+    try {
+        const response = await fetch('/photos/convert', { method: 'POST' });
+        const data = await response.json();
+        
+        showNotification(`Converted ${data.converted} photos (${data.errors} errors)`, 'success');
+    } catch (error) {
+        showNotification('Conversion failed', 'error');
+    }
+}
+
+// Update time ago displays
+function updateTimeAgo() {
+    document.querySelectorAll('.time-ago').forEach(el => {
+        const time = new Date(el.dataset.time);
+        const now = new Date();
+        const diff = Math.floor((now - time) / 1000);
+        
+        if (diff < 60) {
+            el.textContent = 'just now';
+        } else if (diff < 3600) {
+            el.textContent = `${Math.floor(diff / 60)} min ago`;
+        } else if (diff < 86400) {
+            el.textContent = `${Math.floor(diff / 3600)} hours ago`;
+        } else {
+            el.textContent = `${Math.floor(diff / 86400)} days ago`;
+        }
+    });
+}
+
+updateTimeAgo();
+setInterval(updateTimeAgo, 60000);
+</script>
+{% endblock %}

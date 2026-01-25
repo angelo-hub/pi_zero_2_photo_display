@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+config/config.local.yaml
+photos/
+*.log
+.photoframe/
+
+# Downloaded demo files (keep our code)
+RPi_Zero_PhotoPainter.zip
+7in3_e-Paper_E/
+RTC/
+UPS/
+Waveshare_E-Paper/
+
+# Temporary files
+*.tmp
+*.bak

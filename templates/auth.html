@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}iCloud Authentication - Photo Frame{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>iCloud Authentication</h1>
+    <p class="subtitle">Connect to your iCloud account to sync photos</p>
+</div>
+
+<div class="auth-container">
+    <div class="card auth-card">
+        <div class="card-header">
+            <h3>☁️ iCloud Sign In</h3>
+        </div>
+        
+        <div class="card-body">
+            <!-- Status Display -->
+            <div class="auth-status auth-status-{{ status.auth_status }}">
+                <span class="status-icon">
+                    {% if status.auth_status == 'authenticated' %}
+                        ✅
+                    {% elif status.auth_status == 'requires_2fa' %}
+                        🔐
+                    {% elif status.auth_status == 'invalid_credentials' %}
+                        ❌
+                    {% else %}
+                        ⚠️
+                    {% endif %}
+                </span>
+                <span class="status-text">
+                    {% if status.auth_status == 'authenticated' %}
+                        Authenticated as {{ status.username }}
+                    {% elif status.auth_status == 'requires_2fa' %}
+                        Two-factor authentication required
+                    {% elif status.auth_status == 'invalid_credentials' %}
+                        Invalid credentials
+                    {% elif status.auth_status == 'not_configured' %}
+                        Not configured
+                    {% else %}
+                        {{ status.auth_status }}
+                    {% endif %}
+                </span>
+            </div>
+            
+            {% if status.last_error %}
+                <div class="error-message">
+                    <strong>Error:</strong> {{ status.last_error }}
+                </div>
+            {% endif %}
+            
+            <!-- Login Form -->
+            <form action="{{ url_for('auth_login') }}" method="post" class="auth-form">
+                <div class="form-group">
+                    <label for="username">Apple ID</label>
+                    <input type="email" id="username" name="username" 
+                           value="{{ status.username }}" 
+                           placeholder="your.email@icloud.com" 
+                           disabled
+                           class="form-input">
+                    <small class="form-help">Configure in config.yaml</small>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" 
+                           placeholder="Enter your iCloud password"
+                           required
+                           class="form-input">
+                </div>
+                
+                {% if status.auth_status == 'requires_2fa' %}
+                <div class="form-group mfa-group">
+                    <label for="mfa_code">Two-Factor Code</label>
+                    <input type="text" id="mfa_code" name="mfa_code" 
+                           placeholder="6-digit code from your device"
+                           pattern="[0-9]{6}"
+                           maxlength="6"
+                           class="form-input form-input-code">
+                    <small class="form-help">Check your trusted Apple device for the code</small>
+                </div>
+                {% endif %}
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary btn-large">
+                        {% if status.auth_status == 'requires_2fa' %}
+                            Verify Code
+                        {% else %}
+                            Sign In
+                        {% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Info Card -->
+    <div class="card info-card">
+        <div class="card-header">
+            <h3>ℹ️ About iCloud Authentication</h3>
+        </div>
+        <div class="card-body">
+            <ul class="info-list">
+                <li>
+                    <strong>Session Duration:</strong> 
+                    iCloud sessions typically last ~2 months before requiring re-authentication.
+                </li>
+                <li>
+                    <strong>Two-Factor Auth:</strong> 
+                    If you have 2FA enabled (recommended), you'll need to enter a code from your trusted device.
+                </li>
+                <li>
+                    <strong>Notifications:</strong> 
+                    You'll be notified when re-authentication is needed.
+                </li>
+                <li>
+                    <strong>Privacy:</strong> 
+                    Your password is only used for authentication and is never stored.
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

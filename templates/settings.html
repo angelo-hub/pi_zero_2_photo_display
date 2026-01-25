@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Photo Frame{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+    <p class="subtitle">Configure your photo frame</p>
+</div>
+
+<div class="settings-container">
+    <form action="{{ url_for('update_settings') }}" method="post" class="settings-form">
+        <!-- iCloud Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>☁️ iCloud</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label>Apple ID</label>
+                    <input type="email" name="icloud.username" 
+                           value="{{ config.icloud.username }}" 
+                           class="form-input"
+                           placeholder="your.email@icloud.com">
+                </div>
+                <div class="form-group">
+                    <label>Shared Album Name</label>
+                    <input type="text" name="icloud.album" 
+                           value="{{ config.icloud.album }}" 
+                           class="form-input"
+                           placeholder="Photo Frame">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Max Photos</label>
+                        <input type="number" name="icloud.max_photos" 
+                               value="{{ config.icloud.max_photos }}" 
+                               class="form-input"
+                               min="0">
+                        <small class="form-help">0 = unlimited</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Sync Interval (seconds)</label>
+                        <input type="number" name="icloud.sync_interval" 
+                               value="{{ config.icloud.sync_interval }}" 
+                               class="form-input"
+                               min="3600">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Display Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🖥️ Display</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Rotation Interval (seconds)</label>
+                        <input type="number" name="display.rotation_interval" 
+                               value="{{ config.display.rotation_interval }}" 
+                               class="form-input"
+                               min="60">
+                        <small class="form-help">3600 = 1 hour</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Selection Strategy</label>
+                        <select name="display.selection_strategy" class="form-input">
+                            <option value="hybrid" {% if config.display.selection_strategy == 'hybrid' %}selected{% endif %}>
+                                Hybrid (newest prioritized)
+                            </option>
+                            <option value="sequential" {% if config.display.selection_strategy == 'sequential' %}selected{% endif %}>
+                                Sequential
+                            </option>
+                            <option value="random" {% if config.display.selection_strategy == 'random' %}selected{% endif %}>
+                                Random
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Newest Photos Priority (%) <span class="label-value">{{ config.display.hybrid_newest_percent }}%</span></label>
+                    <input type="range" name="display.hybrid_newest_percent" 
+                           value="{{ config.display.hybrid_newest_percent }}" 
+                           class="form-range"
+                           min="0" max="100" step="5"
+                           oninput="this.previousElementSibling.querySelector('.label-value').textContent = this.value + '%'">
+                    <small class="form-help">For hybrid strategy: percentage of time to show newest photos</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Button Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🔘 Physical Button</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>GPIO Pin (BCM)</label>
+                        <input type="number" name="button.gpio_pin" 
+                               value="{{ config.button.gpio_pin }}" 
+                               class="form-input"
+                               min="0" max="27">
+                    </div>
+                    <div class="form-group">
+                        <label>Debounce (ms)</label>
+                        <input type="number" name="button.debounce_ms" 
+                               value="{{ config.button.debounce_ms }}" 
+                               class="form-input"
+                               min="50" max="1000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="button.enabled" 
+                               {% if config.button.enabled %}checked{% endif %}>
+                        <span>Enable button functionality</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Battery Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🔋 Battery</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Min Refresh (%)</label>
+                        <input type="number" name="battery.min_refresh_percent" 
+                               value="{{ config.battery.min_refresh_percent }}" 
+                               class="form-input"
+                               min="0" max="50">
+                        <small class="form-help">Won't refresh below this level</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Low Warning (%)</label>
+                        <input type="number" name="battery.low_warning_percent" 
+                               value="{{ config.battery.low_warning_percent }}" 
+                               class="form-input"
+                               min="0" max="50">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="battery.enabled" 
+                               {% if config.battery.enabled %}checked{% endif %}>
+                        <span>Enable battery monitoring</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Web UI Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🌐 Web Interface</h3>
+            </div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" name="web.port" 
+                               value="{{ config.web.port }}" 
+                               class="form-input"
+                               min="1024" max="65535">
+                    </div>
+                    <div class="form-group">
+                        <label>Host</label>
+                        <input type="text" name="web.host" 
+                               value="{{ config.web.host }}" 
+                               class="form-input">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-large">
+                💾 Save Settings
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

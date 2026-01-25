@@ -1,0 +1,36 @@
+# iCloud Photo Frame - Dependencies
+# Pi Zero 2 W compatible
+
+# iCloud photo download
+icloudpd>=1.17.0
+
+# Image processing
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0  # headless version for Pi (no GUI dependencies)
+numpy>=1.24.0
+
+# Web server for auth UI
+Flask>=3.0.0
+Werkzeug>=3.0.0
+
+# Scheduling
+APScheduler>=3.10.0
+
+# GPIO (Pi Zero)
+gpiozero>=2.0
+RPi.GPIO>=0.7.1
+
+# I2C for UPS/RTC
+smbus2>=0.4.0
+
+# SPI for e-Paper
+spidev>=3.6
+
+# Configuration
+PyYAML>=6.0
+
+# Process management
+python-daemon>=3.0.0
+
+# Notifications (optional)
+requests>=2.31.0  # For webhooks/push notifications

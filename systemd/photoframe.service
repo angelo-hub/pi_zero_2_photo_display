@@ -1,0 +1,35 @@
+[Unit]
+Description=Photo Frame Service
+Documentation=https://github.com/your-repo/photoframe
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/photoframe
+ExecStart=/usr/bin/python3 /home/pi/photoframe/src/main.py
+Restart=on-failure
+RestartSec=10
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=/home/pi
+
+# Logging
+StandardOutput=append:/var/log/photoframe/service.log
+StandardError=append:/var/log/photoframe/service.log
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/photos /home/pi/.photoframe /var/log/photoframe
+
+# Resource limits (Pi Zero 2 W friendly)
+MemoryMax=256M
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

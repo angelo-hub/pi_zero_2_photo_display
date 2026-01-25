@@ -1,0 +1,155 @@
+# iCloud Photo Frame Configuration
+# Copy this to config.local.yaml and customize
+
+# =============================================================================
+# iCloud Settings
+# =============================================================================
+icloud:
+  # Your Apple ID email
+  username: "your.email@icloud.com"
+  
+  # Name of the shared album to sync from
+  # Use exact name as it appears in Photos app
+  album: "Photo Frame"
+  
+  # Directory to store downloaded photos
+  download_dir: "~/photos/raw"
+  
+  # How often to check for new photos (in seconds)
+  # Default: 86400 (24 hours)
+  sync_interval: 86400
+  
+  # Only download photos from the last N days (0 = all)
+  recent_days: 0
+  
+  # Maximum number of photos to keep locally (0 = unlimited)
+  max_photos: 500
+
+# =============================================================================
+# Display Settings
+# =============================================================================
+display:
+  # Display model (matches Waveshare driver naming)
+  model: "7in3e"
+  
+  # Resolution (don't change unless using different display)
+  width: 800
+  height: 480
+  
+  # Orientation: "landscape" or "portrait"
+  orientation: "landscape"
+  
+  # How often to rotate to next photo (in seconds)
+  # Default: 3600 (1 hour)
+  rotation_interval: 3600
+  
+  # Image selection strategy
+  # "hybrid" = 70% newest, 30% random from oldest
+  # "sequential" = oldest to newest
+  # "random" = pure random
+  selection_strategy: "hybrid"
+  
+  # For hybrid strategy: percentage of newest photos to prioritize
+  hybrid_newest_percent: 70
+
+# =============================================================================
+# Button Settings
+# =============================================================================
+button:
+  # GPIO pin for the button (BCM numbering)
+  # Common options: 4, 5, 6, 26
+  # Check your PhotoPainter board for the actual pin
+  gpio_pin: 4
+  
+  # Debounce time in milliseconds
+  debounce_ms: 300
+  
+  # Enable button functionality
+  enabled: true
+
+# =============================================================================
+# Battery/UPS Settings
+# =============================================================================
+battery:
+  # Enable battery monitoring
+  enabled: true
+  
+  # I2C address of INA219 chip
+  i2c_address: 0x43
+  
+  # Minimum battery percentage to allow display refresh
+  min_refresh_percent: 10
+  
+  # Battery percentage to trigger low battery warning
+  low_warning_percent: 20
+
+# =============================================================================
+# Web Interface Settings
+# =============================================================================
+web:
+  # Enable web interface for auth and status
+  enabled: true
+  
+  # Port to run web server on
+  port: 8080
+  
+  # Host to bind to (0.0.0.0 for all interfaces)
+  host: "0.0.0.0"
+  
+  # Enable basic authentication for web UI
+  auth_enabled: false
+  auth_username: "admin"
+  auth_password: "photoframe"
+
+# =============================================================================
+# Notification Settings
+# =============================================================================
+notifications:
+  # Enable notifications when re-auth is needed
+  enabled: true
+  
+  # Notification methods (can enable multiple)
+  
+  # Pushover notifications
+  pushover:
+    enabled: false
+    user_key: ""
+    api_token: ""
+  
+  # Webhook (generic HTTP POST)
+  webhook:
+    enabled: false
+    url: ""
+    
+  # Local notification (just log to file for web UI to display)
+  local:
+    enabled: true
+
+# =============================================================================
+# Logging Settings
+# =============================================================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+  
+  # Log file location
+  file: "/var/log/photoframe/photoframe.log"
+  
+  # Max log file size in MB before rotation
+  max_size_mb: 10
+  
+  # Number of backup log files to keep
+  backup_count: 3
+
+# =============================================================================
+# Paths
+# =============================================================================
+paths:
+  # Directory for converted/ready images
+  ready_dir: "~/photos/ready"
+  
+  # Directory for Waveshare drivers
+  lib_dir: "./lib"
+  
+  # State file for tracking displayed photos
+  state_file: "~/.photoframe/state.json"
