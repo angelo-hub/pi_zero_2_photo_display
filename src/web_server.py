@@ -466,6 +466,9 @@ def update_settings():
     # Handle form data
     updates = request.form.to_dict()
     
+    # Track previous rotation setting to detect changes
+    old_rotation = config.get('display.rotation', 0)
+    
     # Track which checkbox fields exist (they don't send value when unchecked)
     checkbox_fields = [
         'button.enabled',
@@ -506,7 +509,19 @@ def update_settings():
     config.reload()
     icloud_sync.__init__()
     
-    flash('Settings saved successfully!', 'success')
+    # Check if display rotation changed - trigger refresh to show new orientation
+    new_rotation = config.get('display.rotation', 0)
+    if new_rotation != old_rotation:
+        current_photo = photo_selector.get_current_photo()
+        if current_photo and current_photo.exists():
+            logger.info(f"Display rotation changed ({old_rotation}° -> {new_rotation}°), refreshing display")
+            display_manager.display_image(current_photo)
+            flash(f'Settings saved! Display refreshed with {new_rotation}° rotation.', 'success')
+        else:
+            flash('Settings saved! Rotation will apply on next photo.', 'success')
+    else:
+        flash('Settings saved successfully!', 'success')
+    
     return redirect(url_for('settings_page'))
 
 

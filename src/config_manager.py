@@ -99,6 +99,7 @@ class ConfigManager:
                 'width': 800,
                 'height': 480,
                 'orientation': 'landscape',
+                'rotation': 0,  # Display rotation in degrees: 0, 90, 180, 270
                 'rotation_interval': 3600,
                 'selection_strategy': 'hybrid',
                 'hybrid_newest_percent': 70,

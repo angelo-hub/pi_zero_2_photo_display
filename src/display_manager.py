@@ -30,6 +30,7 @@ class DisplayManager:
         self.model = config.get('display.model', '7in3e')
         self.width = config.get('display.width', 800)
         self.height = config.get('display.height', 480)
+        self.rotation = config.get('display.rotation', 0)  # 0, 90, 180, 270
         
         self._epd = None
         self._driver_module = None
@@ -120,6 +121,15 @@ class DisplayManager:
             if img.size != (self.width, self.height):
                 logger.warning(f"Image size {img.size} doesn't match display {self.width}x{self.height}")
                 img = img.resize((self.width, self.height), Image.Resampling.LANCZOS)
+            
+            # Apply display rotation for physical mounting orientation
+            # Reload rotation setting in case it changed
+            self.rotation = config.get('display.rotation', 0)
+            if self.rotation != 0:
+                # PIL rotate is counter-clockwise, so we use negative for clockwise
+                # rotate(90) = 90° counter-clockwise, rotate(-90) or rotate(270) = 90° clockwise
+                img = img.rotate(-self.rotation, expand=False)
+                logger.debug(f"Applied {self.rotation}° rotation for display")
             
             if self._simulate:
                 # In simulation mode, just save a preview
@@ -224,6 +234,7 @@ class DisplayManager:
         return {
             'model': self.model,
             'resolution': f"{self.width}x{self.height}",
+            'rotation': self.rotation,
             'initialized': self._initialized,
             'is_sleeping': self._is_sleeping,
             'simulation_mode': self._simulate,

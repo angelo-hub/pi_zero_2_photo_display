@@ -60,12 +60,22 @@
             <div class="card-body">
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Rotation Interval (seconds)</label>
-                        <input type="number" name="display.rotation_interval" 
-                               value="{{ config.display.rotation_interval }}" 
-                               class="form-input"
-                               min="60">
-                        <small class="form-help">3600 = 1 hour</small>
+                        <label>Display Rotation</label>
+                        <select name="display.rotation" class="form-input">
+                            <option value="0" {% if config.display.rotation == 0 %}selected{% endif %}>
+                                0° (Normal)
+                            </option>
+                            <option value="90" {% if config.display.rotation == 90 %}selected{% endif %}>
+                                90° (Clockwise)
+                            </option>
+                            <option value="180" {% if config.display.rotation == 180 %}selected{% endif %}>
+                                180° (Upside Down)
+                            </option>
+                            <option value="270" {% if config.display.rotation == 270 %}selected{% endif %}>
+                                270° (Counter-clockwise)
+                            </option>
+                        </select>
+                        <small class="form-help">Rotate image for display mounting orientation</small>
                     </div>
                     <div class="form-group">
                         <label>Selection Strategy</label>
@@ -81,6 +91,17 @@
                             </option>
                         </select>
                     </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Rotation Interval (seconds)</label>
+                        <input type="number" name="display.rotation_interval" 
+                               value="{{ config.display.rotation_interval }}" 
+                               class="form-input"
+                               min="60">
+                        <small class="form-help">3600 = 1 hour</small>
+                    </div>
+                    <div class="form-group"></div>
                 </div>
                 <div class="form-group">
                     <label>Newest Photos Priority (%) <span class="label-value">{{ config.display.hybrid_newest_percent }}%</span></label>
