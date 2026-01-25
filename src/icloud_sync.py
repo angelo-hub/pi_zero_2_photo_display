@@ -96,14 +96,39 @@ class ICloudSync:
         """Check if iCloud credentials are configured."""
         return bool(self.username)
     
+    def _has_valid_cookies(self) -> bool:
+        """Check if iCloud session cookies exist."""
+        # icloudpd stores session in ~/.pyicloud/{username}
+        session_file = self.cookie_dir / self.username
+        if session_file.exists():
+            # Check if cookie file is recent (less than 30 days old)
+            import time
+            age_days = (time.time() - session_file.stat().st_mtime) / 86400
+            return age_days < 30
+        return False
+    
     def check_auth_status(self) -> AuthStatus:
         """Check current iCloud authentication status."""
         if not self.is_configured:
             self._auth_status = AuthStatus.NOT_CONFIGURED
             return self._auth_status
         
+        # Check if icloudpd binary exists first
+        if not Path(self._icloudpd_bin).exists() and shutil.which(self._icloudpd_bin) is None:
+            self._auth_status = AuthStatus.UNKNOWN_ERROR
+            self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'. Run: source ~/photoframe/venv/bin/activate && pip install icloudpd"
+            return self._auth_status
+        
+        # If no cookies exist, user needs to authenticate first
+        if not self._has_valid_cookies():
+            self._auth_status = AuthStatus.REQUIRES_2FA
+            self._last_error = None
+            logger.info("No valid session cookies found - authentication required")
+            return self._auth_status
+        
         try:
-            # Try a dry-run to check auth status
+            # Try a dry-run to verify existing session is still valid
+            # Use --no-progress-bar to avoid terminal issues
             result = subprocess.run(
                 [
                     self._icloudpd_bin,
@@ -112,15 +137,21 @@ class ICloudSync:
                     '--cookie-directory', str(self.cookie_dir),
                     '--dry-run',
                     '--recent', '1',
+                    '--no-progress-bar',
                 ],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
+                stdin=subprocess.DEVNULL,  # Don't wait for input
             )
             
             output = result.stdout + result.stderr
             
-            if 'Two-step authentication required' in output or \
+            # Check for password prompt (means session expired)
+            if 'Password' in output or 'getpass' in output or 'ioctl' in output:
+                self._auth_status = AuthStatus.REQUIRES_2FA
+                self._last_error = None
+            elif 'Two-step authentication required' in output or \
                'Two-factor authentication required' in output or \
                'Please enter' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
@@ -129,19 +160,30 @@ class ICloudSync:
                 self._auth_status = AuthStatus.INVALID_CREDENTIALS
             elif result.returncode == 0:
                 self._auth_status = AuthStatus.AUTHENTICATED
+                self._last_error = None
             else:
-                self._auth_status = AuthStatus.UNKNOWN_ERROR
-                self._last_error = output[:500]  # Truncate long errors
+                # Check if it's just a password prompt issue
+                if result.returncode != 0 and ('Password' in output or not output.strip()):
+                    self._auth_status = AuthStatus.REQUIRES_2FA
+                    self._last_error = None
+                else:
+                    self._auth_status = AuthStatus.UNKNOWN_ERROR
+                    self._last_error = output[:500] if output else "Unknown error occurred"
                 
         except subprocess.TimeoutExpired:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = "Authentication check timed out"
         except FileNotFoundError:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
-            self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'. Run: source ~/photoframe/venv/bin/activate && pip install icloudpd"
+            self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'"
         except Exception as e:
-            self._auth_status = AuthStatus.UNKNOWN_ERROR
-            self._last_error = str(e)
+            # Handle getpass errors gracefully - means we need to authenticate
+            if 'getpass' in str(e) or 'ioctl' in str(e):
+                self._auth_status = AuthStatus.REQUIRES_2FA
+                self._last_error = None
+            else:
+                self._auth_status = AuthStatus.UNKNOWN_ERROR
+                self._last_error = str(e)
         
         return self._auth_status
     
@@ -149,8 +191,10 @@ class ICloudSync:
         """
         Authenticate with iCloud.
         
+        Password is passed via environment variable for security (not visible in process list).
+        
         Args:
-            password: iCloud password
+            password: iCloud password (or app-specific password)
             mfa_code: Optional 2FA code if required
             
         Returns:
@@ -160,18 +204,20 @@ class ICloudSync:
             return False, "iCloud username not configured"
         
         try:
-            # Build command
+            # Build command - password passed via env var for security
             cmd = [
                 self._icloudpd_bin,
                 '--username', self.username,
-                '--password', password,
                 '--directory', str(self.download_dir),
                 '--cookie-directory', str(self.cookie_dir),
                 '--auth-only',
             ]
             
-            # If MFA code provided, we need to handle it differently
-            # icloudpd reads MFA from stdin
+            # Pass password via environment variable (more secure than CLI arg)
+            env = os.environ.copy()
+            env['ICLOUD_PASSWORD'] = password
+            
+            # If MFA code provided, pass it via stdin
             input_data = None
             if mfa_code:
                 input_data = mfa_code + '\n'
@@ -181,28 +227,32 @@ class ICloudSync:
                 input=input_data,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
+                env=env,
             )
             
             output = result.stdout + result.stderr
+            logger.debug(f"Auth output: {output[:500]}")
             
             if 'Two-step authentication required' in output or \
-               'Two-factor authentication required' in output:
+               'Two-factor authentication required' in output or \
+               'Please enter validation code' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
-                return False, "2FA code required"
-            elif 'Invalid email/password' in output:
+                return False, "2FA code required. Check your Apple device for the code."
+            elif 'Invalid email/password' in output or 'invalid password' in output.lower():
                 self._auth_status = AuthStatus.INVALID_CREDENTIALS
-                return False, "Invalid email or password"
+                return False, "Invalid email or password. Try using an app-specific password from appleid.apple.com"
             elif 'Authentication successful' in output or result.returncode == 0:
                 self._auth_status = AuthStatus.AUTHENTICATED
-                return True, "Authentication successful"
+                logger.info("iCloud authentication successful")
+                return True, "Authentication successful! Session saved."
             else:
                 self._auth_status = AuthStatus.UNKNOWN_ERROR
                 self._last_error = output[:500]
                 return False, f"Authentication failed: {output[:200]}"
                 
         except subprocess.TimeoutExpired:
-            return False, "Authentication timed out"
+            return False, "Authentication timed out - Apple servers may be slow"
         except Exception as e:
             self._last_error = str(e)
             return False, f"Authentication error: {e}"
@@ -248,16 +298,18 @@ class ICloudSync:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=3600  # 1 hour timeout for large syncs
+                timeout=3600,  # 1 hour timeout for large syncs
+                stdin=subprocess.DEVNULL,  # Don't hang on password prompts
             )
             
             output = result.stdout + result.stderr
             
-            # Check for auth errors
+            # Check for auth errors (session expired)
             if 'Two-step authentication required' in output or \
-               'Two-factor authentication required' in output:
+               'Two-factor authentication required' in output or \
+               'Password' in output or 'getpass' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
-                return False, 0, "Re-authentication required (2FA)"
+                return False, 0, "Session expired - re-authentication required"
             
             # Count files after sync
             files_after = len(list(self.download_dir.glob('**/*.*')))

@@ -64,9 +64,12 @@
                 <div class="form-group">
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" 
-                           placeholder="Enter your iCloud password"
+                           placeholder="Enter your iCloud password or app-specific password"
                            required
                            class="form-input">
+                    <small class="form-help">
+                        Tip: Use an <a href="https://appleid.apple.com/account/manage" target="_blank">app-specific password</a> to avoid 2FA prompts
+                    </small>
                 </div>
                 
                 {% if status.auth_status == 'requires_2fa' %}
@@ -102,20 +105,26 @@
         <div class="card-body">
             <ul class="info-list">
                 <li>
-                    <strong>Session Duration:</strong> 
-                    iCloud sessions typically last ~2 months before requiring re-authentication.
+                    <strong>App-Specific Password (Recommended):</strong> 
+                    Generate one at <a href="https://appleid.apple.com/account/manage" target="_blank">appleid.apple.com</a> → 
+                    Sign-In and Security → App-Specific Passwords. This avoids 2FA prompts!
                 </li>
                 <li>
                     <strong>Two-Factor Auth:</strong> 
-                    If you have 2FA enabled (recommended), you'll need to enter a code from your trusted device.
+                    If using your regular password with 2FA enabled, you'll need to:
+                    <ol style="margin-top: 0.5rem; margin-left: 1rem;">
+                        <li>Enter password and click Sign In</li>
+                        <li>Check your Apple device for the 6-digit code</li>
+                        <li>Enter password again + the code, click Verify</li>
+                    </ol>
                 </li>
                 <li>
-                    <strong>Notifications:</strong> 
-                    You'll be notified when re-authentication is needed.
+                    <strong>Session Duration:</strong> 
+                    Sessions last ~30 days. You'll be notified when re-auth is needed.
                 </li>
                 <li>
                     <strong>Privacy:</strong> 
-                    Your password is only used for authentication and is never stored.
+                    Your password is never stored - only used once to create a session.
                 </li>
             </ul>
         </div>
