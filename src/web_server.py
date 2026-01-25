@@ -10,7 +10,8 @@ from functools import wraps
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, send_file
+from io import BytesIO
 
 from .config_manager import config
 from .icloud_sync import icloud_sync, AuthStatus
@@ -712,6 +713,79 @@ network={{
             
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# =============================================================================
+# Favicon and Meta Images
+# =============================================================================
+
+def generate_emoji_image(size: int, emoji: str = '🖼️', bg_color: tuple = (26, 26, 46)) -> BytesIO:
+    """Generate a PNG image with an emoji centered on a background."""
+    from PIL import Image, ImageDraw, ImageFont
+    
+    # Create image with background color
+    img = Image.new('RGBA', (size, size), bg_color + (255,))
+    draw = ImageDraw.Draw(img)
+    
+    # Try to use a system font that supports emoji
+    font_size = int(size * 0.6)
+    font = None
+    
+    # Common emoji font paths
+    emoji_fonts = [
+        '/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf',
+        '/System/Library/Fonts/Apple Color Emoji.ttc',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/TTF/DejaVuSans.ttf',
+    ]
+    
+    for font_path in emoji_fonts:
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+            break
+        except (OSError, IOError):
+            continue
+    
+    if font is None:
+        # Fallback to default font
+        font = ImageFont.load_default()
+    
+    # Get text bounding box and center it
+    bbox = draw.textbbox((0, 0), emoji, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    
+    x = (size - text_width) // 2 - bbox[0]
+    y = (size - text_height) // 2 - bbox[1]
+    
+    draw.text((x, y), emoji, font=font, embedded_color=True)
+    
+    # Save to BytesIO
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    return buffer
+
+
+@app.route('/favicon.ico')
+def favicon_ico():
+    """Serve favicon.ico as PNG for older browsers."""
+    buffer = generate_emoji_image(32)
+    return send_file(buffer, mimetype='image/png')
+
+
+@app.route('/apple-touch-icon.png')
+def apple_touch_icon():
+    """Generate Apple touch icon with frame emoji."""
+    buffer = generate_emoji_image(180)
+    return send_file(buffer, mimetype='image/png')
+
+
+@app.route('/og-image.png')
+def og_image():
+    """Generate Open Graph preview image with frame emoji."""
+    buffer = generate_emoji_image(1200)
+    return send_file(buffer, mimetype='image/png')
 
 
 # =============================================================================

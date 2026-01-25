@@ -33,22 +33,22 @@ echo ""
 
 # Step 1: Pull latest changes (if in a git repo)
 if [ -d "$SCRIPT_DIR/.git" ]; then
-    echo -e "${GREEN}[1/5] Pulling latest changes from git...${NC}"
+    echo -e "${GREEN}[1/6] Pulling latest changes from git...${NC}"
     cd "$SCRIPT_DIR"
     git pull || echo -e "${YELLOW}Warning: git pull failed, continuing with local files${NC}"
 else
-    echo -e "${YELLOW}[1/5] Not a git repo, skipping pull${NC}"
+    echo -e "${YELLOW}[1/6] Not a git repo, skipping pull${NC}"
 fi
 
 # Step 2: Backup current config
-echo -e "${GREEN}[2/5] Backing up configuration...${NC}"
+echo -e "${GREEN}[2/6] Backing up configuration...${NC}"
 if [ -f "$INSTALL_DIR/config/config.local.yaml" ]; then
     cp "$INSTALL_DIR/config/config.local.yaml" "$INSTALL_DIR/config/config.local.yaml.backup"
     echo "  Backed up config.local.yaml"
 fi
 
 # Step 3: Copy updated files
-echo -e "${GREEN}[3/5] Copying updated files...${NC}"
+echo -e "${GREEN}[3/6] Copying updated files...${NC}"
 
 # Source code
 if [ -d "$SCRIPT_DIR/src" ]; then
@@ -81,8 +81,20 @@ if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
     echo "  ✓ Updated config/config.yaml"
 fi
 
-# Step 4: Update Python dependencies
-echo -e "${GREEN}[4/5] Updating Python dependencies...${NC}"
+# Step 4: Install any new system dependencies
+echo -e "${GREEN}[4/6] Checking system dependencies...${NC}"
+# Install libheif for HEIC support if not present
+if ! dpkg -s libheif-dev &>/dev/null; then
+    echo "  Installing libheif-dev for HEIC support..."
+    sudo apt-get update
+    sudo apt-get install -y libheif-dev
+    echo "  ✓ libheif-dev installed"
+else
+    echo "  ✓ System dependencies OK"
+fi
+
+# Step 5: Update Python dependencies
+echo -e "${GREEN}[5/6] Updating Python dependencies...${NC}"
 if [ -f "$INSTALL_DIR/venv/bin/activate" ]; then
     source "$INSTALL_DIR/venv/bin/activate"
     
@@ -103,8 +115,8 @@ else
     echo -e "${YELLOW}  Warning: Virtual environment not found, skipping pip${NC}"
 fi
 
-# Step 5: Restart service
-echo -e "${GREEN}[5/5] Restarting service...${NC}"
+# Step 6: Restart service
+echo -e "${GREEN}[6/6] Restarting service...${NC}"
 if systemctl is-active --quiet photoframe; then
     sudo systemctl restart photoframe
     echo "  ✓ Service restarted"

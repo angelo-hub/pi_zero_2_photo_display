@@ -14,9 +14,20 @@ import hashlib
 from PIL import Image
 import numpy as np
 
+# Register HEIC/HEIF support if available
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HEIC_SUPPORTED = True
+except ImportError:
+    HEIC_SUPPORTED = False
+
 from .config_manager import config
 
 logger = logging.getLogger(__name__)
+
+if not HEIC_SUPPORTED:
+    logger.warning("HEIC support not available. Install with: pip install pillow-heif")
 
 # 6-color palette for the Waveshare 7.3" e-Paper display
 # Colors: Black, White, Yellow, Red, (unused), Blue, Green

@@ -6,6 +6,7 @@
 
 # Image processing
 Pillow>=10.0.0
+pillow-heif>=0.16.0  # HEIC/HEIF support for Apple photos
 opencv-python-headless>=4.8.0  # headless version for Pi (no GUI dependencies)
 numpy>=1.24.0
 

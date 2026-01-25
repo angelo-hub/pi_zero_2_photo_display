@@ -97,6 +97,7 @@ sudo apt-get install -y \
     liblcms2-dev \
     libopenjp2-7-dev \
     libtiff-dev \
+    libheif-dev \
     git \
     wget \
     wireless-tools
