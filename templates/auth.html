@@ -49,51 +49,38 @@
                 </div>
             {% endif %}
             
-            <!-- Login Form -->
-            <form action="{{ url_for('auth_login') }}" method="post" class="auth-form">
-                <div class="form-group">
-                    <label for="username">Apple ID</label>
-                    <input type="email" id="username" name="username" 
-                           value="{{ status.username }}" 
-                           placeholder="your.email@icloud.com" 
-                           disabled
-                           class="form-input">
-                    <small class="form-help">Configure in config.yaml</small>
+            <!-- Auth Status Display -->
+            <div class="form-group">
+                <label>Apple ID</label>
+                <input type="email" value="{{ status.username }}" disabled class="form-input">
+                <small class="form-help">Configure in Settings</small>
+            </div>
+            
+            {% if status.auth_status == 'authenticated' %}
+                <div class="success-message" style="background: #1a472a; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <strong>✓ Authenticated!</strong><br>
+                    Session is active. Photos will sync automatically.
                 </div>
-                
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" 
-                           placeholder="Enter your iCloud password or app-specific password"
-                           required
-                           class="form-input">
-                    <small class="form-help">
-                        Tip: Use an <a href="https://appleid.apple.com/account/manage" target="_blank">app-specific password</a> to avoid 2FA prompts
-                    </small>
+                <div class="form-actions" style="margin-top: 1rem;">
+                    <a href="{{ url_for('photos_page') }}" class="btn btn-primary">View Photos</a>
+                    <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Dashboard</a>
                 </div>
-                
-                {% if status.auth_status == 'requires_2fa' %}
-                <div class="form-group mfa-group">
-                    <label for="mfa_code">Two-Factor Code</label>
-                    <input type="text" id="mfa_code" name="mfa_code" 
-                           placeholder="6-digit code from your device"
-                           pattern="[0-9]{6}"
-                           maxlength="6"
-                           class="form-input form-input-code">
-                    <small class="form-help">Check your trusted Apple device for the code</small>
+            {% else %}
+                <div class="warning-message" style="background: #4a3728; padding: 1rem; border-radius: 8px; margin-top: 1rem;">
+                    <strong>🔐 SSH Authentication Required</strong><br>
+                    <p style="margin: 0.5rem 0;">iCloud requires interactive 2FA which can't be done through the web UI.</p>
+                    <p style="margin: 0.5rem 0;">Please authenticate via SSH:</p>
+                    <pre style="background: #1a1a2e; padding: 0.75rem; border-radius: 4px; margin: 0.5rem 0; overflow-x: auto; font-size: 0.85rem;">ssh {{ status.username.split('@')[0] if status.username else 'pi' }}@photoframe.local
+source ~/photoframe/venv/bin/activate
+icloudpd --username {{ status.username or 'YOUR_EMAIL' }} \
+  --directory ~/photos --auth-only</pre>
+                    <small>Enter your password and 2FA code when prompted.</small>
                 </div>
-                {% endif %}
-                
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary btn-large">
-                        {% if status.auth_status == 'requires_2fa' %}
-                            Verify Code
-                        {% else %}
-                            Sign In
-                        {% endif %}
-                    </button>
+                <div class="form-actions" style="margin-top: 1rem;">
+                    <button onclick="location.reload();" class="btn btn-primary">Check Status</button>
+                    <a href="{{ url_for('settings_page') }}" class="btn btn-secondary">Settings</a>
                 </div>
-            </form>
+            {% endif %}
         </div>
     </div>
     
@@ -105,26 +92,26 @@
         <div class="card-body">
             <ul class="info-list">
                 <li>
-                    <strong>App-Specific Password (Recommended):</strong> 
-                    Generate one at <a href="https://appleid.apple.com/account/manage" target="_blank">appleid.apple.com</a> → 
-                    Sign-In and Security → App-Specific Passwords. This avoids 2FA prompts!
+                    <strong>⚠️ First-Time Setup (SSH Required):</strong> 
+                    Initial authentication must be done via SSH because it requires interactive 2FA:
+                    <pre style="background: #1a1a2e; padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; overflow-x: auto;">ssh pi@photoframe.local
+source ~/photoframe/venv/bin/activate
+icloudpd --username YOUR_EMAIL --directory ~/photos --auth-only</pre>
+                    Enter your password and 2FA code when prompted.
                 </li>
                 <li>
-                    <strong>Two-Factor Auth:</strong> 
-                    If using your regular password with 2FA enabled, you'll need to:
-                    <ol style="margin-top: 0.5rem; margin-left: 1rem;">
-                        <li>Enter password and click Sign In</li>
-                        <li>Check your Apple device for the 6-digit code</li>
-                        <li>Enter password again + the code, click Verify</li>
-                    </ol>
+                    <strong>After Initial Auth:</strong> 
+                    Once authenticated via SSH, session cookies are saved for ~30 days. 
+                    The web UI can then sync photos automatically.
                 </li>
                 <li>
-                    <strong>Session Duration:</strong> 
-                    Sessions last ~30 days. You'll be notified when re-auth is needed.
+                    <strong>Re-Authentication:</strong> 
+                    When the session expires, you'll need to SSH in again to re-authenticate.
+                    You'll be notified when this is needed.
                 </li>
                 <li>
                     <strong>Privacy:</strong> 
-                    Your password is never stored - only used once to create a session.
+                    Your password is never stored - only used to create session cookies.
                 </li>
             </ul>
         </div>

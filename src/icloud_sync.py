@@ -118,6 +118,36 @@ class ICloudSync:
             return age_days < 30
         return False
     
+    def _sanitize_error(self, error: str) -> str:
+        """Remove sensitive information from error messages."""
+        import re
+        
+        # Remove tracebacks
+        error = re.sub(r'Traceback \(most recent call last\):.*?(?=\n\S|\Z)', '', error, flags=re.DOTALL)
+        error = re.sub(r'File ".*?", line \d+.*?\n', '', error)
+        
+        # Remove password prompts and values
+        error = re.sub(r'iCloud Password for.*?:', '[password prompt]', error)
+        error = re.sub(r'Password:.*', '[password prompt]', error)
+        error = re.sub(r'password["\']?\s*[:=]\s*["\']?[^"\'}\s]+', 'password: [REDACTED]', error, flags=re.IGNORECASE)
+        
+        # Remove getpass warnings (not useful for users)
+        error = re.sub(r'getpass\.py:\d+: GetPassWarning:.*?\n', '', error)
+        error = re.sub(r'Warning: Password input may be echoed\.?\n?', '', error)
+        error = re.sub(r'termios\.error:.*?\n?', '', error)
+        
+        # Clean up whitespace
+        error = re.sub(r'\n\s*\n', '\n', error)
+        error = error.strip()
+        
+        # Extract just the meaningful error message if possible
+        if 'Invalid email/password' in error:
+            return "Invalid email or password"
+        if 'Two-factor authentication required' in error or 'Two-step authentication required' in error:
+            return "2FA required - authenticate via SSH"
+        
+        return error if error else "Unknown error"
+    
     def check_auth_status(self) -> AuthStatus:
         """Check current iCloud authentication status."""
         if not self.is_configured:
@@ -158,17 +188,22 @@ class ICloudSync:
             
             output = result.stdout + result.stderr
             
+            # Sanitize output - remove sensitive info and tracebacks
+            sanitized_output = self._sanitize_error(output)
+            
             # Check for password prompt (means session expired)
-            if 'Password' in output or 'getpass' in output or 'ioctl' in output:
+            if 'Password' in output or 'getpass' in output or 'ioctl' in output or 'termios' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
-                self._last_error = None
+                self._last_error = "Session expired - please authenticate via SSH first"
             elif 'Two-step authentication required' in output or \
                'Two-factor authentication required' in output or \
                'Please enter' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
+                self._last_error = None
             elif 'Invalid email/password' in output or \
                  'authentication failed' in output.lower():
                 self._auth_status = AuthStatus.INVALID_CREDENTIALS
+                self._last_error = "Invalid credentials - check email and password"
             elif result.returncode == 0:
                 self._auth_status = AuthStatus.AUTHENTICATED
                 self._last_error = None
@@ -176,10 +211,10 @@ class ICloudSync:
                 # Check if it's just a password prompt issue
                 if result.returncode != 0 and ('Password' in output or not output.strip()):
                     self._auth_status = AuthStatus.REQUIRES_2FA
-                    self._last_error = None
+                    self._last_error = "Session expired - please authenticate via SSH first"
                 else:
                     self._auth_status = AuthStatus.UNKNOWN_ERROR
-                    self._last_error = output[:500] if output else "Unknown error occurred"
+                    self._last_error = sanitized_output[:200] if sanitized_output else "Unknown error"
                 
         except subprocess.TimeoutExpired:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
@@ -188,13 +223,14 @@ class ICloudSync:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'"
         except Exception as e:
+            error_str = str(e)
             # Handle getpass errors gracefully - means we need to authenticate
-            if 'getpass' in str(e) or 'ioctl' in str(e):
+            if 'getpass' in error_str or 'ioctl' in error_str or 'termios' in error_str:
                 self._auth_status = AuthStatus.REQUIRES_2FA
-                self._last_error = None
+                self._last_error = "Session expired - please authenticate via SSH first"
             else:
                 self._auth_status = AuthStatus.UNKNOWN_ERROR
-                self._last_error = str(e)
+                self._last_error = self._sanitize_error(error_str)[:200]
         
         return self._auth_status
     
