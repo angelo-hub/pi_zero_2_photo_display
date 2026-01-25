@@ -117,11 +117,28 @@ def auth_status():
 @app.route('/photos')
 @auth_required
 def photos_page():
-    """Photos management page."""
+    """Photos management page with pagination."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    
     ready_images = image_converter.get_ready_images()
+    total_count = len(ready_images)
+    total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+    
+    # Clamp page to valid range
+    page = max(1, min(page, total_pages)) if total_pages > 0 else 1
+    
+    # Slice for current page
+    start = (page - 1) * per_page
+    end = start + per_page
+    photos = ready_images[start:end]
+    
     return render_template('photos.html',
-                         photos=ready_images[:50],  # Limit to 50 for performance
-                         total_count=len(ready_images),
+                         photos=photos,
+                         total_count=total_count,
+                         page=page,
+                         per_page=per_page,
+                         total_pages=total_pages,
                          selector_stats=photo_selector.get_stats())
 
 
@@ -198,11 +215,28 @@ def photo_full(filename):
 @app.route('/photos/favorites')
 @auth_required
 def favorites_page():
-    """Favorites page."""
+    """Favorites page with pagination."""
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+    
     favorites = photo_selector.get_favorites()
+    total_count = len(favorites)
+    total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+    
+    # Clamp page to valid range
+    page = max(1, min(page, total_pages))
+    
+    # Slice for current page
+    start = (page - 1) * per_page
+    end = start + per_page
+    photos = favorites[start:end]
+    
     return render_template('photos.html',
-                         photos=favorites,
-                         total_count=len(favorites),
+                         photos=photos,
+                         total_count=total_count,
+                         page=page,
+                         per_page=per_page,
+                         total_pages=total_pages,
                          selector_stats=photo_selector.get_stats(),
                          show_favorites=True)
 
