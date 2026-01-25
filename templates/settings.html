@@ -115,10 +115,70 @@
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>Button Action</label>
+                    <select name="button.action" class="form-input">
+                        <option value="next" {% if config.button.get('action', 'next') == 'next' %}selected{% endif %}>
+                            Next Photo
+                        </option>
+                        <option value="previous" {% if config.button.get('action') == 'previous' %}selected{% endif %}>
+                            Previous Photo
+                        </option>
+                        <option value="random" {% if config.button.get('action') == 'random' %}selected{% endif %}>
+                            Random Photo
+                        </option>
+                        <option value="favorite" {% if config.button.get('action') == 'favorite' %}selected{% endif %}>
+                            Toggle Favorite
+                        </option>
+                        <option value="pause" {% if config.button.get('action') == 'pause' %}selected{% endif %}>
+                            Pause/Resume
+                        </option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" name="button.enabled" 
                                {% if config.button.enabled %}checked{% endif %}>
                         <span>Enable button functionality</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quiet Hours Settings -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🌙 Quiet Hours</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="margin-bottom: 1rem;">
+                    Disable automatic display refresh during certain hours (e.g., nighttime).
+                </p>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="quiet_hours.enabled" 
+                               {% if config.quiet_hours and config.quiet_hours.enabled %}checked{% endif %}>
+                        <span>Enable quiet hours</span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start Time</label>
+                        <input type="time" name="quiet_hours.start" 
+                               value="{{ config.quiet_hours.start if config.quiet_hours else '22:00' }}" 
+                               class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>End Time</label>
+                        <input type="time" name="quiet_hours.end" 
+                               value="{{ config.quiet_hours.end if config.quiet_hours else '07:00' }}" 
+                               class="form-input">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="quiet_hours.disable_button" 
+                               {% if config.quiet_hours and config.quiet_hours.disable_button %}checked{% endif %}>
+                        <span>Also disable button during quiet hours</span>
                     </label>
                 </div>
             </div>

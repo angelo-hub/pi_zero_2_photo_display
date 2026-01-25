@@ -66,6 +66,25 @@ button:
   
   # Enable button functionality
   enabled: true
+  
+  # Button action: "next", "previous", "random", "favorite"
+  action: "next"
+
+# =============================================================================
+# Quiet Hours Settings
+# =============================================================================
+quiet_hours:
+  # Enable quiet hours (no auto-refresh during these times)
+  enabled: false
+  
+  # Start time (24-hour format, e.g., "22:00" for 10 PM)
+  start: "22:00"
+  
+  # End time (24-hour format, e.g., "07:00" for 7 AM)
+  end: "07:00"
+  
+  # Also disable button during quiet hours
+  disable_button: false
 
 # =============================================================================
 # Battery/UPS Settings

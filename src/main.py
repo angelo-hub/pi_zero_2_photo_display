@@ -224,11 +224,46 @@ class PhotoFrameService:
         self.web_thread.start()
         logger.info("Web server started")
     
+    def _is_quiet_hours(self) -> bool:
+        """Check if currently in quiet hours."""
+        if not config.get('quiet_hours.enabled', False):
+            return False
+        
+        try:
+            from datetime import datetime
+            now = datetime.now()
+            current_time = now.hour * 60 + now.minute  # Minutes since midnight
+            
+            start_str = config.get('quiet_hours.start', '22:00')
+            end_str = config.get('quiet_hours.end', '07:00')
+            
+            start_parts = start_str.split(':')
+            end_parts = end_str.split(':')
+            
+            start_time = int(start_parts[0]) * 60 + int(start_parts[1])
+            end_time = int(end_parts[0]) * 60 + int(end_parts[1])
+            
+            # Handle overnight quiet hours (e.g., 22:00 - 07:00)
+            if start_time > end_time:
+                # Quiet hours span midnight
+                return current_time >= start_time or current_time < end_time
+            else:
+                # Quiet hours within same day
+                return start_time <= current_time < end_time
+        except Exception as e:
+            logger.warning(f"Error checking quiet hours: {e}")
+            return False
+    
     def _display_next_photo(self, force: bool = False):
         """Display the next photo in rotation."""
         # Check if paused (unless forced, e.g., from button press)
         if not force and photo_selector.is_paused:
             logger.debug("Skipping auto-rotation - paused")
+            return
+        
+        # Check quiet hours (unless forced)
+        if not force and self._is_quiet_hours():
+            logger.debug("Skipping auto-rotation - quiet hours")
             return
         
         # Check battery
@@ -283,7 +318,35 @@ class PhotoFrameService:
     def _on_button_press(self):
         """Handle physical button press."""
         logger.info("Button press detected")
-        self._display_next_photo(force=True)  # Force even if paused
+        
+        # Check if button disabled during quiet hours
+        if config.get('quiet_hours.disable_button', False) and self._is_quiet_hours():
+            logger.info("Button disabled during quiet hours")
+            return
+        
+        # Get configured button action
+        action = config.get('button.action', 'next')
+        
+        if action == 'next':
+            self._display_next_photo(force=True)
+        elif action == 'previous':
+            photo = photo_selector.select_previous()
+            if photo:
+                display_manager.display_image(photo)
+        elif action == 'random':
+            # Force random selection
+            photo = photo_selector.select_next(force=True)
+            if photo:
+                display_manager.display_image(photo)
+        elif action == 'favorite':
+            photo_selector.toggle_favorite()
+            logger.info("Toggled favorite via button")
+        elif action == 'pause':
+            photo_selector.toggle_pause()
+            logger.info(f"Toggled pause via button: {'paused' if photo_selector.is_paused else 'resumed'}")
+        else:
+            # Default to next
+            self._display_next_photo(force=True)
     
     def _on_low_battery(self, percent):
         """Handle low battery warning."""

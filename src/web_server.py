@@ -5,6 +5,7 @@ Flask-based web interface for authentication, status, and control.
 
 import os
 import logging
+import subprocess
 from functools import wraps
 from datetime import datetime
 from pathlib import Path
@@ -406,11 +407,278 @@ def update_settings():
     # Update config (basic implementation)
     for key, value in updates.items():
         if '.' in key:
+            # Handle checkboxes (they don't send value when unchecked)
             config.set(key, value)
     
     config.save()
     flash('Settings saved', 'success')
     return redirect(url_for('settings_page'))
+
+
+# =============================================================================
+# System Management
+# =============================================================================
+
+@app.route('/system')
+@auth_required
+def system_page():
+    """System management page."""
+    return render_template('system.html',
+                         system_info=get_system_info(),
+                         wifi_networks=get_wifi_networks(),
+                         recent_logs=get_recent_logs(50))
+
+
+def get_system_info() -> dict:
+    """Get system information."""
+    info = {
+        'hostname': 'unknown',
+        'ip_address': 'unknown',
+        'cpu_temp': 'N/A',
+        'cpu_usage': 'N/A',
+        'memory_used': 'N/A',
+        'memory_total': 'N/A',
+        'memory_percent': 0,
+        'disk_used': 'N/A',
+        'disk_total': 'N/A',
+        'disk_percent': 0,
+        'uptime': 'N/A',
+        'is_raspberry_pi': False,
+    }
+    
+    try:
+        import socket
+        info['hostname'] = socket.gethostname()
+        
+        # Get IP address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            info['ip_address'] = s.getsockname()[0]
+        except:
+            pass
+        finally:
+            s.close()
+    except:
+        pass
+    
+    # Check if Raspberry Pi
+    try:
+        with open('/proc/cpuinfo', 'r') as f:
+            if 'Raspberry' in f.read():
+                info['is_raspberry_pi'] = True
+    except:
+        pass
+    
+    # CPU Temperature (Raspberry Pi)
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
+            temp = int(f.read().strip()) / 1000
+            info['cpu_temp'] = f"{temp:.1f}°C"
+    except:
+        pass
+    
+    # CPU Usage
+    try:
+        with open('/proc/loadavg', 'r') as f:
+            load = f.read().split()[0]
+            info['cpu_usage'] = f"{float(load)*100:.1f}%"
+    except:
+        pass
+    
+    # Memory
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            meminfo = {}
+            for line in f:
+                parts = line.split(':')
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip().split()[0]
+                    meminfo[key] = int(value)
+            
+            total = meminfo.get('MemTotal', 0) / 1024  # MB
+            available = meminfo.get('MemAvailable', 0) / 1024  # MB
+            used = total - available
+            
+            info['memory_total'] = f"{total:.0f} MB"
+            info['memory_used'] = f"{used:.0f} MB"
+            info['memory_percent'] = int((used / total) * 100) if total > 0 else 0
+    except:
+        pass
+    
+    # Disk usage
+    try:
+        import shutil
+        usage = shutil.disk_usage('/')
+        info['disk_total'] = f"{usage.total / (1024**3):.1f} GB"
+        info['disk_used'] = f"{usage.used / (1024**3):.1f} GB"
+        info['disk_percent'] = int((usage.used / usage.total) * 100)
+    except:
+        pass
+    
+    # Uptime
+    try:
+        with open('/proc/uptime', 'r') as f:
+            uptime_seconds = float(f.read().split()[0])
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            minutes = int((uptime_seconds % 3600) // 60)
+            
+            if days > 0:
+                info['uptime'] = f"{days}d {hours}h {minutes}m"
+            elif hours > 0:
+                info['uptime'] = f"{hours}h {minutes}m"
+            else:
+                info['uptime'] = f"{minutes}m"
+    except:
+        pass
+    
+    return info
+
+
+def get_wifi_networks() -> list:
+    """Get configured WiFi networks."""
+    networks = []
+    
+    try:
+        # Try to read wpa_supplicant.conf
+        wpa_conf = Path('/etc/wpa_supplicant/wpa_supplicant.conf')
+        if wpa_conf.exists():
+            content = wpa_conf.read_text()
+            
+            # Parse networks (basic parsing)
+            import re
+            network_blocks = re.findall(r'network=\{([^}]+)\}', content, re.DOTALL)
+            
+            for block in network_blocks:
+                ssid_match = re.search(r'ssid="([^"]+)"', block)
+                priority_match = re.search(r'priority=(\d+)', block)
+                
+                if ssid_match:
+                    networks.append({
+                        'ssid': ssid_match.group(1),
+                        'priority': int(priority_match.group(1)) if priority_match else 0,
+                    })
+        
+        # Get current connection
+        result = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=5)
+        current_ssid = result.stdout.strip() if result.returncode == 0 else None
+        
+        for network in networks:
+            network['connected'] = network['ssid'] == current_ssid
+            
+    except Exception as e:
+        logger.warning(f"Could not get WiFi networks: {e}")
+    
+    return sorted(networks, key=lambda x: x.get('priority', 0), reverse=True)
+
+
+def get_recent_logs(lines: int = 50) -> list:
+    """Get recent log entries."""
+    logs = []
+    
+    log_file = Path(config.get('logging.file', '/var/log/photoframe/photoframe.log'))
+    
+    try:
+        if log_file.exists():
+            with open(log_file, 'r') as f:
+                all_lines = f.readlines()
+                logs = all_lines[-lines:]
+    except Exception as e:
+        logs = [f"Could not read logs: {e}"]
+    
+    return logs
+
+
+@app.route('/system/info')
+@auth_required
+def system_info_api():
+    """Get system info as JSON."""
+    return jsonify(get_system_info())
+
+
+@app.route('/system/reboot', methods=['POST'])
+@auth_required
+def system_reboot():
+    """Reboot the system."""
+    try:
+        subprocess.Popen(['sudo', 'reboot'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return jsonify({'success': True, 'message': 'Rebooting...'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/system/shutdown', methods=['POST'])
+@auth_required
+def system_shutdown():
+    """Shutdown the system."""
+    try:
+        subprocess.Popen(['sudo', 'shutdown', '-h', 'now'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return jsonify({'success': True, 'message': 'Shutting down...'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/system/restart-service', methods=['POST'])
+@auth_required
+def restart_service():
+    """Restart the photoframe service."""
+    try:
+        subprocess.Popen(['sudo', 'systemctl', 'restart', 'photoframe'], 
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return jsonify({'success': True, 'message': 'Service restarting...'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/system/logs')
+@auth_required
+def get_logs_api():
+    """Get recent logs as JSON."""
+    lines = request.args.get('lines', 50, type=int)
+    return jsonify({'logs': get_recent_logs(lines)})
+
+
+@app.route('/system/wifi/add', methods=['POST'])
+@auth_required
+def add_wifi():
+    """Add a WiFi network."""
+    ssid = request.form.get('ssid', '').strip()
+    password = request.form.get('password', '').strip()
+    priority = request.form.get('priority', '1').strip()
+    
+    if not ssid or not password:
+        return jsonify({'success': False, 'message': 'SSID and password required'}), 400
+    
+    try:
+        # Build network block
+        network_block = f'''
+network={{
+    ssid="{ssid}"
+    psk="{password}"
+    priority={priority}
+}}
+'''
+        # Append to wpa_supplicant.conf
+        result = subprocess.run(
+            ['sudo', 'tee', '-a', '/etc/wpa_supplicant/wpa_supplicant.conf'],
+            input=network_block,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            # Reconfigure WiFi
+            subprocess.run(['sudo', 'wpa_cli', '-i', 'wlan0', 'reconfigure'], 
+                          capture_output=True, timeout=10)
+            return jsonify({'success': True, 'message': f'Added network: {ssid}'})
+        else:
+            return jsonify({'success': False, 'message': 'Failed to add network'}), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 # =============================================================================

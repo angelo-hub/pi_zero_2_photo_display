@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+
+{% block title %}System - Photo Frame{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>System Management</h1>
+    <p class="subtitle">Monitor and control your Photo Frame</p>
+</div>
+
+<div class="system-grid">
+    <!-- System Info Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3>📊 System Information</h3>
+            <button class="btn btn-small btn-secondary" onclick="refreshSystemInfo()">
+                🔄 Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="status-list" id="systemInfoList">
+                <div class="status-item">
+                    <span class="label">Hostname</span>
+                    <span class="value" id="hostname">{{ system_info.hostname }}</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">IP Address</span>
+                    <span class="value" id="ip_address">{{ system_info.ip_address }}</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Uptime</span>
+                    <span class="value" id="uptime">{{ system_info.uptime }}</span>
+                </div>
+                {% if system_info.is_raspberry_pi %}
+                <div class="status-item">
+                    <span class="label">CPU Temperature</span>
+                    <span class="value" id="cpu_temp">{{ system_info.cpu_temp }}</span>
+                </div>
+                {% endif %}
+                <div class="status-item">
+                    <span class="label">CPU Load</span>
+                    <span class="value" id="cpu_usage">{{ system_info.cpu_usage }}</span>
+                </div>
+                <div class="status-item">
+                    <span class="label">Memory</span>
+                    <span class="value" id="memory">{{ system_info.memory_used }} / {{ system_info.memory_total }}</span>
+                </div>
+                <div class="status-item full-width">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ system_info.memory_percent|default(0) }}%;" id="memoryBar"></div>
+                    </div>
+                </div>
+                <div class="status-item">
+                    <span class="label">Disk</span>
+                    <span class="value" id="disk">{{ system_info.disk_used }} / {{ system_info.disk_total }}</span>
+                </div>
+                <div class="status-item full-width">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ system_info.disk_percent|default(0) }}%;" id="diskBar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- System Controls -->
+    <div class="card">
+        <div class="card-header">
+            <h3>⚙️ System Controls</h3>
+        </div>
+        <div class="card-body">
+            <div class="control-buttons-col">
+                <button class="btn btn-secondary" onclick="restartService()">
+                    <span class="btn-icon">🔄</span>
+                    Restart Service
+                </button>
+                <button class="btn btn-warning" onclick="confirmReboot()">
+                    <span class="btn-icon">🔃</span>
+                    Reboot System
+                </button>
+                <button class="btn btn-danger" onclick="confirmShutdown()">
+                    <span class="btn-icon">⏻</span>
+                    Shutdown
+                </button>
+            </div>
+            <p class="text-muted" style="margin-top: 1rem; font-size: 0.875rem;">
+                ⚠️ Reboot and shutdown require physical access to power cycle.
+            </p>
+        </div>
+    </div>
+    
+    <!-- WiFi Networks -->
+    <div class="card">
+        <div class="card-header">
+            <h3>📶 WiFi Networks</h3>
+        </div>
+        <div class="card-body">
+            <div class="wifi-list">
+                {% for network in wifi_networks %}
+                <div class="wifi-item {% if network.connected %}wifi-connected{% endif %}">
+                    <span class="wifi-icon">{{ '📶' if network.connected else '📡' }}</span>
+                    <span class="wifi-ssid">{{ network.ssid }}</span>
+                    {% if network.connected %}
+                    <span class="badge badge-success">Connected</span>
+                    {% endif %}
+                    <span class="wifi-priority">Priority: {{ network.priority }}</span>
+                </div>
+                {% else %}
+                <p class="text-muted">No WiFi networks configured</p>
+                {% endfor %}
+            </div>
+            
+            <hr style="border-color: var(--border-color); margin: 1rem 0;">
+            
+            <h4 style="margin-bottom: 0.75rem;">Add Network</h4>
+            <form id="addWifiForm" onsubmit="addWifi(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>SSID</label>
+                        <input type="text" name="ssid" class="form-input" placeholder="Network name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" name="password" class="form-input" placeholder="Password" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <input type="number" name="priority" class="form-input" value="1" min="0" max="10">
+                        <small class="form-help">Higher = preferred</small>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">
+                            Add Network
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Logs -->
+    <div class="card card-full-width">
+        <div class="card-header">
+            <h3>📋 Recent Logs</h3>
+            <button class="btn btn-small btn-secondary" onclick="refreshLogs()">
+                🔄 Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="log-viewer" id="logViewer">
+                {% for line in recent_logs %}
+                <div class="log-line">{{ line }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3 id="modalTitle">Confirm Action</h3>
+        <p id="modalMessage">Are you sure?</p>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-danger" id="modalConfirmBtn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Notifications -->
+<div id="notifications" class="notifications"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNotification(message, type = 'info') {
+    const container = document.getElementById('notifications');
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `${message}<button onclick="this.parentElement.remove()">×</button>`;
+    container.appendChild(notification);
+    setTimeout(() => notification.remove(), 5000);
+}
+
+async function refreshSystemInfo() {
+    try {
+        const response = await fetch('/system/info');
+        const data = await response.json();
+        
+        document.getElementById('hostname').textContent = data.hostname;
+        document.getElementById('ip_address').textContent = data.ip_address;
+        document.getElementById('uptime').textContent = data.uptime;
+        document.getElementById('cpu_usage').textContent = data.cpu_usage;
+        document.getElementById('memory').textContent = `${data.memory_used} / ${data.memory_total}`;
+        document.getElementById('memoryBar').style.width = `${data.memory_percent}%`;
+        document.getElementById('disk').textContent = `${data.disk_used} / ${data.disk_total}`;
+        document.getElementById('diskBar').style.width = `${data.disk_percent}%`;
+        
+        if (document.getElementById('cpu_temp')) {
+            document.getElementById('cpu_temp').textContent = data.cpu_temp;
+        }
+        
+        showNotification('System info refreshed', 'success');
+    } catch (error) {
+        showNotification('Failed to refresh', 'error');
+    }
+}
+
+async function refreshLogs() {
+    try {
+        const response = await fetch('/system/logs?lines=50');
+        const data = await response.json();
+        
+        const viewer = document.getElementById('logViewer');
+        viewer.innerHTML = data.logs.map(line => `<div class="log-line">${line}</div>`).join('');
+        viewer.scrollTop = viewer.scrollHeight;
+        
+        showNotification('Logs refreshed', 'success');
+    } catch (error) {
+        showNotification('Failed to refresh logs', 'error');
+    }
+}
+
+async function restartService() {
+    showNotification('Restarting service...', 'info');
+    try {
+        const response = await fetch('/system/restart-service', { method: 'POST' });
+        const data = await response.json();
+        showNotification(data.message, data.success ? 'success' : 'error');
+    } catch (error) {
+        showNotification('Failed to restart service', 'error');
+    }
+}
+
+function confirmReboot() {
+    showModal('Reboot System', 'Are you sure you want to reboot? The display will be unavailable for about 1 minute.', async () => {
+        showNotification('Rebooting...', 'info');
+        try {
+            await fetch('/system/reboot', { method: 'POST' });
+        } catch (error) {
+            // Expected - connection will drop
+        }
+    });
+}
+
+function confirmShutdown() {
+    showModal('Shutdown System', 'Are you sure you want to shutdown? You will need physical access to power it back on.', async () => {
+        showNotification('Shutting down...', 'info');
+        try {
+            await fetch('/system/shutdown', { method: 'POST' });
+        } catch (error) {
+            // Expected - connection will drop
+        }
+    });
+}
+
+function showModal(title, message, onConfirm) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalMessage').textContent = message;
+    document.getElementById('confirmModal').style.display = 'flex';
+    
+    document.getElementById('modalConfirmBtn').onclick = () => {
+        closeModal();
+        onConfirm();
+    };
+}
+
+function closeModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+}
+
+async function addWifi(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    showNotification('Adding network...', 'info');
+    
+    try {
+        const response = await fetch('/system/wifi/add', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification(data.message, 'success');
+            form.reset();
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showNotification(data.message, 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to add network', 'error');
+    }
+}
+
+// Auto-scroll logs to bottom
+document.getElementById('logViewer').scrollTop = document.getElementById('logViewer').scrollHeight;
+</script>
+
+<style>
+.system-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+.card-full-width {
+    grid-column: 1 / -1;
+}
+
+.control-buttons-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, var(--accent-error), #dc2626);
+    color: white;
+}
+
+.btn-danger:hover {
+    box-shadow: 0 4px 12px rgba(248, 113, 113, 0.4);
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.status-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.wifi-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.wifi-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-sm);
+}
+
+.wifi-connected {
+    border-left: 3px solid var(--accent-success);
+}
+
+.wifi-icon {
+    font-size: 1.25rem;
+}
+
+.wifi-ssid {
+    flex: 1;
+    font-weight: 500;
+}
+
+.wifi-priority {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.log-viewer {
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-sm);
+    padding: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.75rem;
+}
+
+.log-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.log-line:last-child {
+    border-bottom: none;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+}
+
+.modal-content h3 {
+    margin-bottom: 1rem;
+}
+
+.modal-content p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+</style>
+{% endblock %}
