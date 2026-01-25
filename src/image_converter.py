@@ -277,6 +277,8 @@ class ImageConverter:
         total = len(to_convert)
         logger.info(f"Found {len(source_images)} source images, {total} need conversion")
         
+        import gc
+        
         for i, source_path in enumerate(to_convert, 1):
             logger.info(f"Converting {i}/{total}: {source_path.name}")
             result = self.convert_image(source_path)
@@ -284,6 +286,9 @@ class ImageConverter:
                 converted += 1
             else:
                 errors += 1
+            
+            # Free memory after each conversion (important for Pi Zero)
+            gc.collect()
             
             # Delay between conversions to avoid overloading Pi Zero
             if i < total and delay_seconds > 0:

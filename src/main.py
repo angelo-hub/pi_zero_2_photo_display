@@ -96,21 +96,36 @@ class PhotoFrameService:
         logger.info("Starting Photo Frame Service")
         logger.info("=" * 50)
         
+        import gc
+        import time
+        
         self.running = True
         
-        # Initialize components
+        # Initialize components (lightweight)
         self._init_battery_monitor()
-        self._init_display()
-        self._init_button()
+        gc.collect()
         
-        # Check iCloud auth status
-        self._check_icloud_auth()
+        self._init_display()
+        gc.collect()
+        
+        self._init_button()
+        gc.collect()
+        
+        # Quick iCloud auth check (no subprocess to save memory)
+        self._check_icloud_auth(skip_subprocess=True)
+        gc.collect()
         
         # Setup scheduled tasks
         self._setup_scheduler()
         
         # Start web server in background thread
         self._start_web_server()
+        gc.collect()
+        
+        # Delay initial photo display to let system stabilize
+        logger.info("Waiting 10 seconds before initial photo display...")
+        time.sleep(10)
+        gc.collect()
         
         # Display initial photo
         self._display_next_photo()
@@ -166,9 +181,34 @@ class PhotoFrameService:
             button_handler.init(callback=self._on_button_press)
             logger.info("Button handler initialized")
     
-    def _check_icloud_auth(self):
-        """Check iCloud authentication status."""
+    def _check_icloud_auth(self, skip_subprocess: bool = True):
+        """Check iCloud authentication status.
+        
+        Args:
+            skip_subprocess: If True, only check cookies exist (no icloudpd subprocess)
+                           This saves memory on Pi Zero startup.
+        """
+        import gc
+        
+        if skip_subprocess:
+            # Quick check: just see if cookies exist (no subprocess needed)
+            if icloud_sync._has_valid_cookies():
+                logger.info("iCloud: Session cookies found (assuming authenticated)")
+                icloud_sync._auth_status = AuthStatus.AUTHENTICATED
+                return
+            elif not icloud_sync.is_configured:
+                logger.info("iCloud: Not configured")
+                icloud_sync._auth_status = AuthStatus.NOT_CONFIGURED
+                return
+            else:
+                logger.info("iCloud: No session cookies - auth required")
+                icloud_sync._auth_status = AuthStatus.REQUIRES_2FA
+                self._send_auth_notification()
+                return
+        
+        # Full check with subprocess (memory intensive)
         status = icloud_sync.check_auth_status()
+        gc.collect()  # Free memory after subprocess
         
         if status == AuthStatus.AUTHENTICATED:
             logger.info("iCloud: Authenticated")
