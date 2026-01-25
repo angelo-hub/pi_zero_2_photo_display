@@ -42,13 +42,13 @@ ARCH=$(uname -m)
 echo -e "${GREEN}Detected architecture: ${ARCH}${NC}"
 
 echo -e "${GREEN}[1/9] Setting up swap for Pi Zero 2 W...${NC}"
-# Pi Zero 2 W has only 512MB RAM, needs more swap for installations
-CURRENT_SWAP=$(free -m | awk '/^Swap:/ {print $2}')
-if [ "$CURRENT_SWAP" -lt 1024 ]; then
-    echo "  Current swap: ${CURRENT_SWAP}MB, increasing to 1GB..."
+# Pi Zero 2 W has only 512MB RAM, needs file-based swap (not just zram)
+# Check specifically for our swapfile, not just any swap
+if [ ! -f /swapfile ] || [ $(stat -f%z /swapfile 2>/dev/null || stat -c%s /swapfile 2>/dev/null || echo 0) -lt 1000000000 ]; then
+    echo "  Creating 1GB swapfile (this takes a minute)..."
     
-    # Disable existing swap if any
-    sudo swapoff -a 2>/dev/null || true
+    # Disable swapfile if it exists
+    sudo swapoff /swapfile 2>/dev/null || true
     
     # Remove old swapfile if exists
     sudo rm -f /swapfile 2>/dev/null || true
@@ -59,15 +59,23 @@ if [ "$CURRENT_SWAP" -lt 1024 ]; then
     sudo mkswap /swapfile
     sudo swapon /swapfile
     
-    # Make permanent
-    if ! grep -q "/swapfile" /etc/fstab; then
-        echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
-    fi
+    # Make permanent - remove old entry first, then add
+    sudo sed -i '/\/swapfile/d' /etc/fstab
+    echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
     
-    echo "  ✓ Swap increased to 1GB"
+    echo "  ✓ 1GB swapfile created and enabled"
 else
-    echo "  ✓ Swap already adequate (${CURRENT_SWAP}MB)"
+    # Swapfile exists, make sure it's active
+    if ! swapon --show | grep -q "/swapfile"; then
+        echo "  Enabling existing swapfile..."
+        sudo swapon /swapfile
+    fi
+    echo "  ✓ Swapfile already configured"
 fi
+
+# Verify swap is working
+TOTAL_SWAP=$(free -m | awk '/^Swap:/ {print $2}')
+echo "  Total swap available: ${TOTAL_SWAP}MB"
 
 echo -e "${GREEN}[2/9] Creating directories...${NC}"
 mkdir -p "$INSTALL_DIR"

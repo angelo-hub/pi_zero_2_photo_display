@@ -81,8 +81,31 @@ if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
     echo "  ✓ Updated config/config.yaml"
 fi
 
-# Step 4: Install any new system dependencies
-echo -e "${GREEN}[4/6] Checking system dependencies...${NC}"
+# Step 4: Verify swap and install system dependencies
+echo -e "${GREEN}[4/6] Checking system requirements...${NC}"
+
+# Check/fix swapfile (Pi Zero 2 W needs this)
+if [ ! -f /swapfile ]; then
+    echo "  Creating 1GB swapfile..."
+    sudo dd if=/dev/zero of=/swapfile bs=1M count=1024 status=progress
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    sudo sed -i '/\/swapfile/d' /etc/fstab
+    echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+    echo "  ✓ Swapfile created"
+elif ! swapon --show | grep -q "/swapfile"; then
+    echo "  Enabling swapfile..."
+    sudo swapon /swapfile 2>/dev/null || true
+    echo "  ✓ Swapfile enabled"
+else
+    echo "  ✓ Swapfile OK"
+fi
+
+# Show swap status
+TOTAL_SWAP=$(free -m | awk '/^Swap:/ {print $2}')
+echo "  Total swap: ${TOTAL_SWAP}MB"
+
 # Install libheif for HEIC support if not present
 if ! dpkg -s libheif-dev &>/dev/null; then
     echo "  Installing libheif-dev for HEIC support..."
