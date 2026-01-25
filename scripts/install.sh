@@ -56,14 +56,17 @@ sudo apt-get install -y \
     python3-venv \
     python3-pil \
     python3-numpy \
+    python3-spidev \
+    python3-gpiozero \
+    python3-smbus \
     libjpeg-dev \
     zlib1g-dev \
-    libfreetype6-dev \
+    libfreetype-dev \
     liblcms2-dev \
-    libopenjp2-7 \
-    libtiff5 \
-    libatlas-base-dev \
-    git
+    libopenjp2-7-dev \
+    libtiff-dev \
+    git \
+    wireless-tools
 
 echo -e "${GREEN}[4/8] Enabling SPI and I2C interfaces...${NC}"
 # Enable SPI
@@ -92,15 +95,18 @@ if [ -d "$SCRIPT_DIR/Waveshare_E-Paper/lib/waveshare_epd" ]; then
 fi
 
 echo -e "${GREEN}[6/8] Setting up Python virtual environment...${NC}"
-python3 -m venv "$INSTALL_DIR/venv"
+# Use --system-site-packages to access apt-installed packages (gpiozero, spidev, etc.)
+python3 -m venv --system-site-packages "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
 
 # Upgrade pip
 pip install --upgrade pip
 
 # Install Python dependencies
+# Note: Some packages may already be available via system, pip will skip them
 echo -e "${GREEN}Installing Python packages (this may take a while on Pi Zero)...${NC}"
-pip install -r "$INSTALL_DIR/requirements.txt"
+pip install --break-system-packages -r "$INSTALL_DIR/requirements.txt" || \
+    pip install -r "$INSTALL_DIR/requirements.txt"
 
 deactivate
 

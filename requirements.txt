@@ -1,5 +1,5 @@
 # iCloud Photo Frame - Dependencies
-# Pi Zero 2 W compatible
+# Pi Zero 2 W compatible (Raspberry Pi OS Bookworm)
 
 # iCloud photo download
 icloudpd>=1.17.0
@@ -16,21 +16,19 @@ Werkzeug>=3.0.0
 # Scheduling
 APScheduler>=3.10.0
 
-# GPIO (Pi Zero)
+# GPIO (Pi Zero) - prefer system packages via apt
+# These may already be installed via apt (python3-gpiozero, python3-spidev, python3-smbus)
 gpiozero>=2.0
-RPi.GPIO>=0.7.1
+# RPi.GPIO>=0.7.1  # Deprecated, gpiozero is preferred
 
-# I2C for UPS/RTC
+# I2C for UPS/RTC - prefer apt: python3-smbus
 smbus2>=0.4.0
 
-# SPI for e-Paper
+# SPI for e-Paper - prefer apt: python3-spidev
 spidev>=3.6
 
 # Configuration
 PyYAML>=6.0
-
-# Process management
-python-daemon>=3.0.0
 
 # Notifications (optional)
 requests>=2.31.0  # For webhooks/push notifications
