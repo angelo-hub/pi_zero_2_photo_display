@@ -100,13 +100,21 @@ python3 -m venv --system-site-packages "$INSTALL_DIR/venv"
 source "$INSTALL_DIR/venv/bin/activate"
 
 # Upgrade pip
-pip install --upgrade pip
+pip install --upgrade pip 2>/dev/null || pip install --break-system-packages --upgrade pip
 
 # Install Python dependencies
 # Note: Some packages may already be available via system, pip will skip them
 echo -e "${GREEN}Installing Python packages (this may take a while on Pi Zero)...${NC}"
-pip install --break-system-packages -r "$INSTALL_DIR/requirements.txt" || \
-    pip install -r "$INSTALL_DIR/requirements.txt"
+
+# Try installing, with fallback for Bookworm's externally-managed-environment
+if pip install -r "$INSTALL_DIR/requirements.txt"; then
+    echo "  ✓ Packages installed"
+elif pip install --break-system-packages -r "$INSTALL_DIR/requirements.txt"; then
+    echo "  ✓ Packages installed (with --break-system-packages)"
+else
+    echo -e "${YELLOW}Trying individual critical packages...${NC}"
+    pip install --break-system-packages icloudpd Flask APScheduler PyYAML Pillow requests numpy || true
+fi
 
 deactivate
 

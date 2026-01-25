@@ -85,11 +85,20 @@ fi
 echo -e "${GREEN}[4/5] Updating Python dependencies...${NC}"
 if [ -f "$INSTALL_DIR/venv/bin/activate" ]; then
     source "$INSTALL_DIR/venv/bin/activate"
-    pip install --quiet --upgrade -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || \
-        pip install --quiet -r "$SCRIPT_DIR/requirements.txt" || \
-        echo -e "${YELLOW}Warning: Some pip packages may have failed${NC}"
+    
+    # Try normal pip first, then with --break-system-packages for Bookworm
+    echo "  Installing Python packages..."
+    if pip install --upgrade -r "$SCRIPT_DIR/requirements.txt"; then
+        echo "  ✓ Dependencies updated"
+    elif pip install --break-system-packages --upgrade -r "$SCRIPT_DIR/requirements.txt"; then
+        echo "  ✓ Dependencies updated (with --break-system-packages)"
+    else
+        echo -e "${YELLOW}  Warning: pip install had issues, trying individual packages...${NC}"
+        # Try installing critical packages individually
+        pip install --break-system-packages icloudpd Flask APScheduler PyYAML Pillow requests || true
+    fi
+    
     deactivate
-    echo "  ✓ Dependencies updated"
 else
     echo -e "${YELLOW}  Warning: Virtual environment not found, skipping pip${NC}"
 fi
