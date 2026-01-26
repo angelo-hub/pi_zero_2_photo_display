@@ -204,6 +204,10 @@ class ICloudSync:
             
             output = result.stdout + result.stderr
             
+            # Log raw output for debugging (at debug level to avoid noise)
+            if output.strip():
+                logger.debug(f"icloudpd auth check output: {output[:1000]}")
+            
             # Sanitize output - remove sensitive info and tracebacks
             sanitized_output = self._sanitize_error(output)
             
@@ -231,13 +235,19 @@ class ICloudSync:
                 else:
                     self._auth_status = AuthStatus.UNKNOWN_ERROR
                     self._last_error = sanitized_output[:200] if sanitized_output else "Unknown error"
+                    # Log the full error details for debugging
+                    logger.error(f"iCloud auth check failed with unknown error. Return code: {result.returncode}")
+                    logger.error(f"Raw stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+                    logger.error(f"Raw stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
                 
         except subprocess.TimeoutExpired:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = "Authentication check timed out"
+            logger.error("iCloud auth check timed out after 60 seconds")
         except FileNotFoundError:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'"
+            logger.error(f"icloudpd binary not found at '{self._icloudpd_bin}'")
         except Exception as e:
             error_str = str(e)
             # Handle getpass errors gracefully - means we need to authenticate
@@ -247,6 +257,7 @@ class ICloudSync:
             else:
                 self._auth_status = AuthStatus.UNKNOWN_ERROR
                 self._last_error = self._sanitize_error(error_str)[:200]
+                logger.exception(f"Unexpected error during iCloud auth check: {error_str}")
         
         return self._auth_status
     
@@ -304,6 +315,7 @@ class ICloudSync:
                 return False, "2FA code required. Check your Apple device for the code."
             elif 'Invalid email/password' in output or 'invalid password' in output.lower():
                 self._auth_status = AuthStatus.INVALID_CREDENTIALS
+                logger.warning("iCloud authentication failed: invalid credentials")
                 return False, "Invalid email or password. Try using an app-specific password from appleid.apple.com"
             elif 'Authentication successful' in output or result.returncode == 0:
                 self._auth_status = AuthStatus.AUTHENTICATED
@@ -312,12 +324,17 @@ class ICloudSync:
             else:
                 self._auth_status = AuthStatus.UNKNOWN_ERROR
                 self._last_error = output[:500]
+                logger.error(f"iCloud authentication failed with unknown error. Return code: {result.returncode}")
+                logger.error(f"Raw stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+                logger.error(f"Raw stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
                 return False, f"Authentication failed: {output[:200]}"
                 
         except subprocess.TimeoutExpired:
+            logger.error("iCloud authentication timed out after 120 seconds")
             return False, "Authentication timed out - Apple servers may be slow"
         except Exception as e:
             self._last_error = str(e)
+            logger.exception(f"Unexpected error during iCloud authentication: {e}")
             return False, f"Authentication error: {e}"
     
     def sync_photos(self) -> Tuple[bool, int, str]:
@@ -367,11 +384,22 @@ class ICloudSync:
             
             output = result.stdout + result.stderr
             
+            # Log sync output for debugging
+            if output.strip():
+                logger.debug(f"icloudpd sync output: {output[:1000]}")
+            
+            # Log non-zero return codes
+            if result.returncode != 0:
+                logger.warning(f"icloudpd sync returned non-zero exit code: {result.returncode}")
+                logger.warning(f"stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+                logger.warning(f"stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
+            
             # Check for auth errors (session expired)
             if 'Two-step authentication required' in output or \
                'Two-factor authentication required' in output or \
                'Password' in output or 'getpass' in output:
                 self._auth_status = AuthStatus.REQUIRES_2FA
+                logger.error("iCloud session expired during sync - re-authentication required")
                 return False, 0, "Session expired - re-authentication required"
             
             # Count files after sync
