@@ -651,23 +651,38 @@ def get_system_info() -> dict:
 
 
 def get_wifi_networks() -> list:
-    """Get configured WiFi networks."""
+    """Get configured WiFi networks. Reads wpa_supplicant.conf (via sudo if needed)."""
+    import re
     networks = []
+    wpa_conf = Path('/etc/wpa_supplicant/wpa_supplicant.conf')
     
     try:
-        # Try to read wpa_supplicant.conf
-        wpa_conf = Path('/etc/wpa_supplicant/wpa_supplicant.conf')
+        content = None
         if wpa_conf.exists():
-            content = wpa_conf.read_text()
-            
-            # Parse networks (basic parsing)
-            import re
+            try:
+                content = wpa_conf.read_text()
+            except (PermissionError, OSError):
+                # File is root-only (typical on Raspberry Pi); try reading via sudo
+                result = subprocess.run(
+                    ['sudo', 'cat', '/etc/wpa_supplicant/wpa_supplicant.conf'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    content = result.stdout
+                    logger.debug("Read wpa_supplicant.conf via sudo")
+                else:
+                    logger.warning(
+                        "Cannot read WiFi config: permission denied. "
+                        "For listing networks, add sudoers: pi ALL=(ALL) NOPASSWD: /bin/cat /etc/wpa_supplicant/wpa_supplicant.conf"
+                    )
+        
+        if content:
             network_blocks = re.findall(r'network=\{([^}]+)\}', content, re.DOTALL)
-            
             for block in network_blocks:
                 ssid_match = re.search(r'ssid="([^"]+)"', block)
                 priority_match = re.search(r'priority=(\d+)', block)
-                
                 if ssid_match:
                     networks.append({
                         'ssid': ssid_match.group(1),
@@ -677,12 +692,10 @@ def get_wifi_networks() -> list:
         # Get current connection
         result = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=5)
         current_ssid = result.stdout.strip() if result.returncode == 0 else None
-        
         for network in networks:
             network['connected'] = network['ssid'] == current_ssid
-            
     except Exception as e:
-        logger.warning(f"Could not get WiFi networks: {e}")
+        logger.warning("Could not get WiFi networks: %s", e)
     
     return sorted(networks, key=lambda x: x.get('priority', 0), reverse=True)
 

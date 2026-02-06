@@ -204,6 +204,16 @@ python -c "from src.image_converter import image_converter; print(image_converte
 2. Verify INA219 chip address (default: 0x43)
 3. Run `i2cdetect -y 1` to scan I2C devices
 
+### WiFi Networks Not Listed (System page shows "No WiFi networks configured")
+
+The web UI reads `/etc/wpa_supplicant/wpa_supplicant.conf`, which is root-only. The install and update scripts add a sudoers rule so the service user can read it. If you already had an older install, run the update script once so it creates `/etc/sudoers.d/photoframe-wifi`:
+
+```bash
+./scripts/update.sh
+```
+
+Then restart the service or reload the System page. To add the rule manually, create `/etc/sudoers.d/photoframe-wifi` with your service user (e.g. `pi`) allowed NOPASSWD for `/bin/cat /etc/wpa_supplicant/wpa_supplicant.conf` (and the same for `tee` and `wpa_cli` if you want to add networks from the UI).
+
 ## License
 
 MIT License - feel free to modify and share!

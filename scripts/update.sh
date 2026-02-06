@@ -116,6 +116,25 @@ else
     echo "  ✓ System dependencies OK"
 fi
 
+# Step 4b: Ensure sudo can read WiFi config (so System → WiFi lists networks)
+WIFI_SUDOERS="/etc/sudoers.d/photoframe-wifi"
+SERVICE_USER="${SUDO_USER:-$USER}"
+if [ -z "$SERVICE_USER" ]; then
+    SERVICE_USER="pi"
+fi
+if [ ! -f "$WIFI_SUDOERS" ]; then
+    echo -e "${GREEN}Configuring sudo for WiFi (list/add networks)...${NC}"
+    sudo tee "$WIFI_SUDOERS" > /dev/null << SUDOEOF
+# Photo Frame: list and add WiFi networks without password
+$SERVICE_USER ALL=(ALL) NOPASSWD: /bin/cat /etc/wpa_supplicant/wpa_supplicant.conf
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/bin/tee -a /etc/wpa_supplicant/wpa_supplicant.conf
+$SERVICE_USER ALL=(ALL) NOPASSWD: /usr/sbin/wpa_cli -i wlan0 reconfigure
+$SERVICE_USER ALL=(ALL) NOPASSWD: /sbin/wpa_cli -i wlan0 reconfigure
+SUDOEOF
+    sudo chmod 440 "$WIFI_SUDOERS"
+    echo "  ✓ $SERVICE_USER can list/add WiFi via web UI"
+fi
+
 # Step 5: Update Python dependencies
 echo -e "${GREEN}[5/6] Updating Python dependencies...${NC}"
 if [ -f "$INSTALL_DIR/venv/bin/activate" ]; then

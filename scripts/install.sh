@@ -185,7 +185,7 @@ fi
 
 deactivate
 
-echo -e "${GREEN}[8/9] Setting up configuration...${NC}"
+echo -e "${GREEN}[8/10] Setting up configuration...${NC}"
 mkdir -p "$INSTALL_DIR/config"
 if [ -f "$SCRIPT_DIR/config/config.yaml" ]; then
     cp "$SCRIPT_DIR/config/config.yaml" "$INSTALL_DIR/config/"
@@ -199,7 +199,25 @@ if [ ! -f "$INSTALL_DIR/config/config.local.yaml" ]; then
 EOF
 fi
 
-echo -e "${GREEN}[9/9] Installing systemd service...${NC}"
+echo -e "${GREEN}[9/10] Configuring sudo for WiFi (list/add networks)...${NC}"
+# Allow the service user to read wpa_supplicant.conf and add networks (no password)
+WIFI_SUDOERS="/etc/sudoers.d/photoframe-wifi"
+if [ ! -f "$WIFI_SUDOERS" ]; then
+    # Allow both /usr/sbin and /sbin wpa_cli (distro-dependent)
+    sudo tee "$WIFI_SUDOERS" > /dev/null << SUDOEOF
+# Photo Frame: list and add WiFi networks without password
+$USER ALL=(ALL) NOPASSWD: /bin/cat /etc/wpa_supplicant/wpa_supplicant.conf
+$USER ALL=(ALL) NOPASSWD: /usr/bin/tee -a /etc/wpa_supplicant/wpa_supplicant.conf
+$USER ALL=(ALL) NOPASSWD: /usr/sbin/wpa_cli -i wlan0 reconfigure
+$USER ALL=(ALL) NOPASSWD: /sbin/wpa_cli -i wlan0 reconfigure
+SUDOEOF
+    sudo chmod 440 "$WIFI_SUDOERS"
+    echo "  ✓ $USER can list/add WiFi via web UI"
+else
+    echo "  ✓ WiFi sudoers already present"
+fi
+
+echo -e "${GREEN}[10/10] Installing systemd service...${NC}"
 cat > /tmp/photoframe.service << EOF
 [Unit]
 Description=Photo Frame Service
