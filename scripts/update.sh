@@ -132,6 +132,9 @@ if [ -f "$INSTALL_DIR/venv/bin/activate" ]; then
         # Try installing critical packages individually
         pip install --break-system-packages icloudpd Flask APScheduler PyYAML Pillow requests || true
     fi
+    # Pip may warn about conflicts for other system packages (e.g. types-seaborn, picamera2).
+    # Those are unrelated to the photo frame; you can ignore them if the install succeeded.
+    echo "  (Ignore dependency conflicts for packages not in this app, e.g. types-seaborn, picamera2.)"
     
     deactivate
 else

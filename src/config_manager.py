@@ -91,6 +91,7 @@ class ConfigManager:
                 'album': 'Photo Frame',
                 'download_dir': '~/photos/raw',
                 'sync_interval': 86400,
+                'sync_cron': '',  # If set (e.g. "0 3 * * *" for 3am daily), overrides sync_interval
                 'recent_days': 0,
                 'max_photos': 500,
             },

@@ -11,8 +11,6 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from PIL import Image
-
 from .config_manager import config
 
 logger = logging.getLogger(__name__)
@@ -109,6 +107,7 @@ class DisplayManager:
             if not self.init():
                 return False
         
+        from PIL import Image
         try:
             # Load image
             img = Image.open(image_path)

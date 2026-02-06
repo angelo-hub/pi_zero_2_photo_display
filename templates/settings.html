@@ -47,6 +47,23 @@
                                value="{{ config.icloud.sync_interval }}" 
                                class="form-input"
                                min="3600">
+                        <small class="form-help">Used when cron below is empty (86400 = 24h)</small>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Sync Schedule (cron)</label>
+                    <input type="text" name="icloud.sync_cron" 
+                           id="sync_cron_input"
+                           value="{{ (config.icloud.get('sync_cron') or '') }}" 
+                           class="form-input"
+                           placeholder="0 3 * * * (e.g. 3am daily)">
+                    <small class="form-help">Optional. 5 fields: minute hour day month day_of_week. Leave empty to use interval above. Restart service after changing.</small>
+                    <div class="form-presets" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                        <button type="button" class="btn btn-secondary btn-small" data-cron="">Use interval</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-cron="0 0 * * *">Midnight daily</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-cron="0 3 * * *">3 AM daily</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-cron="0 */6 * * *">Every 6 hours</button>
+                        <button type="button" class="btn btn-secondary btn-small" data-cron="0 */12 * * *">Every 12 hours</button>
                     </div>
                 </div>
             </div>
@@ -327,4 +344,13 @@
         </div>
     </form>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var input = document.getElementById('sync_cron_input');
+    if (!input) return;
+    document.querySelectorAll('.form-presets button[data-cron]').forEach(function(btn) {
+        btn.addEventListener('click', function() { input.value = this.getAttribute('data-cron') || ''; });
+    });
+});
+</script>
 {% endblock %}

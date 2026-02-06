@@ -15,9 +15,16 @@ icloud:
   # Directory to store downloaded photos
   download_dir: "~/photos/raw"
   
-  # How often to check for new photos (in seconds)
+  # How often to check for new photos (in seconds) when sync_cron is not set
   # Default: 86400 (24 hours)
   sync_interval: 86400
+  
+  # Optional: cron schedule (5 fields: minute hour day month day_of_week)
+  # If set, overrides sync_interval. Examples:
+  #   "0 3 * * *"   = 3:00 AM daily
+  #   "0 0 * * *"   = midnight daily
+  #   "0 */6 * * *" = every 6 hours
+  # sync_cron: ""
   
   # Only download photos from the last N days (0 = all)
   recent_days: 0

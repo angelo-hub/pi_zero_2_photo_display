@@ -2,33 +2,38 @@
 Image Converter Module
 Handles resizing and converting images to 6-color palette for e-Paper display.
 Uses Floyd-Steinberg dithering for best visual results.
+
+PIL and pillow_heif are imported lazily (only when converting) to keep
+the main process memory low on Pi Zero 2.
 """
 
 import os
 import logging
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Any
 from datetime import datetime
 import hashlib
-
-import PIL
-from PIL import Image
-import numpy as np
-
-# Register HEIC/HEIF support if available
-try:
-    import pillow_heif
-    pillow_heif.register_heif_opener()
-    HEIC_SUPPORTED = True
-except ImportError:
-    HEIC_SUPPORTED = False
 
 from .config_manager import config
 
 logger = logging.getLogger(__name__)
 
-if not HEIC_SUPPORTED:
-    logger.warning("HEIC support not available. Install with: pip install pillow-heif")
+# Lazy: HEIC support checked on first use
+_HEIC_REGISTERED = False
+
+
+def _ensure_heif() -> bool:
+    """Register HEIC/HEIF opener if available. Call before opening .heic files. Returns True if supported."""
+    global _HEIC_REGISTERED
+    if _HEIC_REGISTERED:
+        return True
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+        _HEIC_REGISTERED = True
+        return True
+    except ImportError:
+        return False
 
 
 def _is_video_file(file_path: Path) -> bool:
@@ -109,9 +114,8 @@ class ImageConverter:
         self.ready_dir.mkdir(parents=True, exist_ok=True)
         self.thumbnails_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create palette image for quantization
-        self._palette_image = Image.new("P", (1, 1))
-        self._palette_image.putpalette(EPAPER_PALETTE)
+        # Palette image created lazily on first convert (avoids loading PIL at import)
+        self._palette_image: Any = None
         
         # Track converted images
         self._conversion_cache: dict = {}
@@ -161,6 +165,15 @@ class ImageConverter:
         
         return True, None
     
+    def _get_palette_image(self):
+        """Create or return the 6-color palette image (lazy load PIL)."""
+        if self._palette_image is not None:
+            return self._palette_image
+        from PIL import Image
+        self._palette_image = Image.new("P", (1, 1))
+        self._palette_image.putpalette(EPAPER_PALETTE)
+        return self._palette_image
+    
     def convert_image(self, source_path: Path, force: bool = False) -> Optional[Path]:
         """
         Convert a single image to e-Paper format.
@@ -181,12 +194,20 @@ class ImageConverter:
             logger.info(f"Skipping video file: {source_path.name}")
             return None
         
+        # Ensure HEIC support before opening .heic files (lazy load pillow_heif)
+        if source_path.suffix.lower() in ('.heic', '.heif') and not _ensure_heif():
+            logger.warning("HEIC support not available. Install with: pip install pillow-heif")
+            return None
+        
         # Check cache
         if not force:
             needs_conv, cached_path = self._needs_conversion(source_path)
             if not needs_conv and cached_path:
                 logger.debug(f"Using cached conversion: {cached_path}")
                 return cached_path
+        
+        import PIL
+        from PIL import Image
         
         try:
             # Load image
@@ -206,7 +227,7 @@ class ImageConverter:
             img = self._smart_crop(img, target_w, target_h)
             
             # Convert to 6-color palette with dithering
-            img_dithered = img.quantize(palette=self._palette_image, dither=Image.Dither.FLOYDSTEINBERG)
+            img_dithered = img.quantize(palette=self._get_palette_image(), dither=Image.Dither.FLOYDSTEINBERG)
             
             # Convert back to RGB for saving (better compatibility)
             img_final = img_dithered.convert('RGB')
@@ -238,7 +259,7 @@ class ImageConverter:
             logger.error(f"Conversion error for {source_path}: {e}")
             return None
     
-    def _fix_orientation(self, img: Image.Image) -> Image.Image:
+    def _fix_orientation(self, img: 'Any') -> 'Any':
         """Fix image orientation based on EXIF data."""
         try:
             from PIL import ExifTags
@@ -266,11 +287,12 @@ class ImageConverter:
         
         return img
     
-    def _smart_crop(self, img: Image.Image, target_w: int, target_h: int) -> Image.Image:
+    def _smart_crop(self, img: 'Any', target_w: int, target_h: int) -> 'Any':
         """
         Intelligently crop image to target dimensions.
         Tries to keep the most important parts of the image.
         """
+        from PIL import Image
         img_w, img_h = img.size
         
         # Check if image needs rotation to better fit display
@@ -318,6 +340,7 @@ class ImageConverter:
         Returns:
             Path to thumbnail, or None on failure
         """
+        from PIL import Image
         try:
             # Determine thumbnail filename and path
             if self.thumb_format == 'webp':

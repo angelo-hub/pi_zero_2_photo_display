@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.cron import CronTrigger
 
 from src.config_manager import config
 from src.icloud_sync import icloud_sync, AuthStatus
@@ -235,16 +236,42 @@ class PhotoFrameService:
         )
         logger.info(f"Scheduled photo rotation every {rotation_interval} seconds")
         
-        # iCloud sync
-        sync_interval = config.get('icloud.sync_interval', 86400)
-        self.scheduler.add_job(
-            self._sync_photos,
-            trigger=IntervalTrigger(seconds=sync_interval),
-            id='icloud_sync',
-            name='Sync iCloud photos',
-            replace_existing=True
-        )
-        logger.info(f"Scheduled iCloud sync every {sync_interval} seconds")
+        # iCloud sync: cron expression (e.g. "0 3 * * *" for 3am daily) or interval in seconds
+        sync_cron = (config.get('icloud.sync_cron') or '').strip()
+        if sync_cron:
+            parts = sync_cron.split()
+            if len(parts) >= 5:
+                try:
+                    self.scheduler.add_job(
+                        self._sync_photos,
+                        trigger=CronTrigger(
+                            minute=parts[0],
+                            hour=parts[1],
+                            day=parts[2],
+                            month=parts[3],
+                            day_of_week=parts[4],
+                        ),
+                        id='icloud_sync',
+                        name='Sync iCloud photos',
+                        replace_existing=True
+                    )
+                    logger.info("Scheduled iCloud sync (cron): %s", sync_cron)
+                except Exception as e:
+                    logger.warning("Invalid sync_cron %r, falling back to interval: %s", sync_cron, e)
+                    sync_cron = ''
+            else:
+                logger.warning("sync_cron must have 5 fields (min hour day month dow), got %r", sync_cron)
+                sync_cron = ''
+        if not sync_cron:
+            sync_interval = config.get('icloud.sync_interval', 86400)
+            self.scheduler.add_job(
+                self._sync_photos,
+                trigger=IntervalTrigger(seconds=sync_interval),
+                id='icloud_sync',
+                name='Sync iCloud photos',
+                replace_existing=True
+            )
+            logger.info("Scheduled iCloud sync every %s seconds", sync_interval)
         
         # 24h telemetry (CPU + RAM) every 60s
         self.scheduler.add_job(
