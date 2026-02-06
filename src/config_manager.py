@@ -147,6 +147,11 @@ class ConfigManager:
                 'quality': 85,
                 'format': 'webp',  # webp or jpeg
             },
+            'debug': {
+                'ram_profiling': False,
+                'ram_profiling_interval_seconds': 120,
+                'tracemalloc': False,  # allocation tracking (adds overhead)
+            },
         }
     
     def get(self, key: str, default: Any = None) -> Any:

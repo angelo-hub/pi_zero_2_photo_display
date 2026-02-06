@@ -77,6 +77,8 @@ Settings are stored in `config/config.yaml` and `config/config.local.yaml`.
 | `button.gpio_pin` | 4 | GPIO pin for physical button |
 | `battery.min_refresh_percent` | 10 | Min battery % for display refresh |
 | `web.port` | 8080 | Web interface port |
+| `debug.ram_profiling` | false | Log process RAM (RSS) periodically for memory troubleshooting |
+| `debug.ram_profiling_interval_seconds` | 120 | How often to log RAM when profiling is enabled |
 
 ### Photo Selection Strategies
 

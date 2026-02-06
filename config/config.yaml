@@ -172,6 +172,17 @@ logging:
   backup_count: 3
 
 # =============================================================================
+# Debug (development / low-memory troubleshooting)
+# =============================================================================
+debug:
+  # Log process RAM (RSS) periodically to help find memory growth
+  ram_profiling: false
+  # How often to log RAM when ram_profiling is enabled (seconds)
+  ram_profiling_interval_seconds: 120
+  # Use tracemalloc for allocation snapshots (adds overhead, use sparingly)
+  tracemalloc: false
+
+# =============================================================================
 # Paths
 # =============================================================================
 paths:

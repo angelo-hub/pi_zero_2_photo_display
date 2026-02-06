@@ -11,6 +11,7 @@ from typing import Optional, Tuple, List
 from datetime import datetime
 import hashlib
 
+import PIL
 from PIL import Image
 import numpy as np
 
@@ -28,6 +29,48 @@ logger = logging.getLogger(__name__)
 
 if not HEIC_SUPPORTED:
     logger.warning("HEIC support not available. Install with: pip install pillow-heif")
+
+
+def _is_video_file(file_path: Path) -> bool:
+    """
+    Check if a file is actually a video (even if it has image extension like .HEIC).
+    HEIC/HEIF is a container format that can hold both images and videos.
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            # Read the first 32 bytes to check file type
+            header = f.read(32)
+            
+            # HEIC/HEIF files start with ftyp box after 4 bytes
+            # Check for video-specific brand codes
+            if len(header) >= 12:
+                # Skip first 4 bytes (box size), next 4 should be 'ftyp'
+                if header[4:8] == b'ftyp':
+                    brand = header[8:12]
+                    # Video brands (HEVC video)
+                    video_brands = [b'hevc', b'hevx', b'M4V ', b'mp41', b'mp42', b'isom', b'iso2']
+                    # Image brands
+                    image_brands = [b'heic', b'heix', b'mif1', b'msf1', b'avif']
+                    
+                    # If brand indicates video, check for image marker in compatible brands
+                    if brand in video_brands:
+                        # Check compatible brands (bytes 12 onwards)
+                        compat_brands = header[12:32]
+                        for img_brand in image_brands:
+                            if img_brand in compat_brands:
+                                return False  # Has image compatibility
+                        return True  # Likely video
+                    
+            # Also check for common video signatures
+            # MOV/MP4 files
+            if b'moov' in header or b'mdat' in header[:16]:
+                if b'heic' not in header and b'mif1' not in header:
+                    return True
+                    
+    except Exception as e:
+        logger.debug(f"Could not check file type for {file_path}: {e}")
+    
+    return False
 
 # 6-color palette for the Waveshare 7.3" e-Paper display
 # Colors: Black, White, Yellow, Red, (unused), Blue, Green
@@ -133,6 +176,11 @@ class ImageConverter:
             logger.error(f"Source image not found: {source_path}")
             return None
         
+        # Skip video files (HEIC container can hold videos)
+        if source_path.suffix.lower() in ['.heic', '.heif'] and _is_video_file(source_path):
+            logger.info(f"Skipping video file: {source_path.name}")
+            return None
+        
         # Check cache
         if not force:
             needs_conv, cached_path = self._needs_conversion(source_path)
@@ -182,6 +230,10 @@ class ImageConverter:
             logger.info(f"Converted: {source_path.name} -> {output_name}")
             return output_path
             
+        except PIL.UnidentifiedImageError:
+            # File is not a valid image (might be a video or corrupted)
+            logger.warning(f"Skipping non-image file: {source_path.name} (may be video or corrupted)")
+            return None
         except Exception as e:
             logger.error(f"Conversion error for {source_path}: {e}")
             return None

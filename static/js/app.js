@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateAllTimeAgo();
     setInterval(updateAllTimeAgo, 60000);
     
-    // Check for auth status on dashboard
+    // Check for auth status on dashboard (throttled on server to every 10 min to avoid heavy CPU)
     if (document.querySelector('.status-card')) {
         checkAuthStatus();
     }

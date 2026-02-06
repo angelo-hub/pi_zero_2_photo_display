@@ -20,6 +20,7 @@ from .photo_selector import photo_selector
 from .display_manager import display_manager
 from .button_handler import button_handler
 from .battery_monitor import battery_monitor
+from . import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -476,6 +477,8 @@ def update_settings():
         'quiet_hours.enabled',
         'quiet_hours.disable_button',
         'web.auth_enabled',
+        'debug.ram_profiling',
+        'debug.tracemalloc',
     ]
     
     # Set unchecked checkboxes to False
@@ -706,6 +709,13 @@ def get_recent_logs(lines: int = 50) -> list:
 def system_info_api():
     """Get system info as JSON."""
     return jsonify(get_system_info())
+
+
+@app.route('/system/telemetry')
+@auth_required
+def system_telemetry():
+    """Get 24h CPU and memory telemetry for charts."""
+    return jsonify(telemetry.get_24h())
 
 
 @app.route('/system/reboot', methods=['POST'])

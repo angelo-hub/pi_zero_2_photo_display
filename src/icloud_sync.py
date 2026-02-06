@@ -17,6 +17,11 @@ from .config_manager import config
 
 logger = logging.getLogger(__name__)
 
+# Throttle heavy icloudpd subprocess: only run check every N seconds (avoids CPU spike on every dashboard load)
+AUTH_CHECK_THROTTLE_SECONDS = 600  # 10 minutes
+# Cache photos count to avoid globbing download dir on every status request
+PHOTOS_COUNT_CACHE_SECONDS = 120  # 2 minutes
+
 
 class AuthStatus(Enum):
     """iCloud authentication status."""
@@ -48,6 +53,9 @@ class ICloudSync:
         self._last_sync: Optional[datetime] = None
         self._last_error: Optional[str] = None
         self._photos_downloaded = 0
+        self._last_auth_check_time: Optional[datetime] = None
+        self._cached_photos_count: Optional[int] = None
+        self._cached_photos_count_time: Optional[datetime] = None
         
         # Ensure directories exist
         self.download_dir.mkdir(parents=True, exist_ok=True)
@@ -165,10 +173,17 @@ class ICloudSync:
         return error if error else "Unknown error"
     
     def check_auth_status(self) -> AuthStatus:
-        """Check current iCloud authentication status."""
+        """Check current iCloud authentication status. Throttled to avoid running heavy icloudpd on every dashboard load."""
         if not self.is_configured:
             self._auth_status = AuthStatus.NOT_CONFIGURED
             return self._auth_status
+        
+        # Return cached status if we checked recently (avoids spawning icloudpd on every page hit)
+        now = datetime.now()
+        if self._last_auth_check_time is not None:
+            elapsed = (now - self._last_auth_check_time).total_seconds()
+            if elapsed < AUTH_CHECK_THROTTLE_SECONDS:
+                return self._auth_status
         
         # Check if icloudpd binary exists first
         if not Path(self._icloudpd_bin).exists() and shutil.which(self._icloudpd_bin) is None:
@@ -239,17 +254,21 @@ class ICloudSync:
                     logger.error(f"iCloud auth check failed with unknown error. Return code: {result.returncode}")
                     logger.error(f"Raw stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
                     logger.error(f"Raw stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
+            self._last_auth_check_time = datetime.now()
                 
         except subprocess.TimeoutExpired:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = "Authentication check timed out"
+            self._last_auth_check_time = datetime.now()
             logger.error("iCloud auth check timed out after 60 seconds")
         except FileNotFoundError:
             self._auth_status = AuthStatus.UNKNOWN_ERROR
             self._last_error = f"icloudpd not found at '{self._icloudpd_bin}'"
+            self._last_auth_check_time = datetime.now()
             logger.error(f"icloudpd binary not found at '{self._icloudpd_bin}'")
         except Exception as e:
             error_str = str(e)
+            self._last_auth_check_time = datetime.now()
             # Handle getpass errors gracefully - means we need to authenticate
             if 'getpass' in error_str or 'ioctl' in error_str or 'termios' in error_str:
                 self._auth_status = AuthStatus.REQUIRES_2FA
@@ -408,6 +427,7 @@ class ICloudSync:
             
             self._photos_downloaded = photos_downloaded
             self._last_sync = datetime.now()
+            self._cached_photos_count = None  # Invalidate so next get_status() recounts
             
             # Enforce max photos limit
             if self.max_photos > 0:
@@ -462,7 +482,15 @@ class ICloudSync:
         return sorted(photos, key=lambda p: p.stat().st_mtime, reverse=True)
     
     def get_status(self) -> dict:
-        """Get current sync status for web UI."""
+        """Get current sync status for web UI. Photos count is cached to avoid heavy glob on every request."""
+        now = datetime.now()
+        if (self._cached_photos_count is not None and self._cached_photos_count_time is not None and
+            (now - self._cached_photos_count_time).total_seconds() < PHOTOS_COUNT_CACHE_SECONDS):
+            photos_count = self._cached_photos_count
+        else:
+            photos_count = len(self.get_downloaded_photos())
+            self._cached_photos_count = photos_count
+            self._cached_photos_count_time = now
         return {
             'configured': self.is_configured,
             'username': self.username,
@@ -470,7 +498,7 @@ class ICloudSync:
             'auth_status': self._auth_status.value,
             'last_sync': self._last_sync.isoformat() if self._last_sync else None,
             'last_error': self._last_error,
-            'photos_count': len(self.get_downloaded_photos()),
+            'photos_count': photos_count,
             'download_dir': str(self.download_dir),
         }
 

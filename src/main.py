@@ -25,6 +25,8 @@ from src.photo_selector import photo_selector
 from src.display_manager import display_manager
 from src.button_handler import button_handler
 from src.battery_monitor import battery_monitor
+from src import telemetry
+from src import ram_profiler
 
 # Configure logging
 def setup_logging():
@@ -244,6 +246,35 @@ class PhotoFrameService:
         )
         logger.info(f"Scheduled iCloud sync every {sync_interval} seconds")
         
+        # 24h telemetry (CPU + RAM) every 60s
+        self.scheduler.add_job(
+            telemetry.collect,
+            trigger=IntervalTrigger(seconds=60),
+            id='telemetry',
+            name='Collect CPU/RAM telemetry',
+            replace_existing=True
+        )
+        logger.info("Scheduled telemetry collection every 60 seconds")
+        # One baseline sample now (second sample in 60s gives first CPU %)
+        try:
+            telemetry.collect()
+        except Exception as e:
+            logger.debug("Initial telemetry sample skipped: %s", e)
+        
+        # Debug: periodic RAM profiling when enabled
+        if config.get('debug.ram_profiling', False):
+            interval = config.get('debug.ram_profiling_interval_seconds', 120)
+            self.scheduler.add_job(
+                ram_profiler.collect,
+                trigger=IntervalTrigger(seconds=interval),
+                id='ram_profiler',
+                name='RAM profiling',
+                replace_existing=True
+            )
+            logger.info("RAM profiling enabled (interval=%s s)", interval)
+            ram_profiler.start_tracemalloc_if_enabled()
+            ram_profiler.log_memory("startup")
+        
         # Start scheduler
         self.scheduler.start()
         logger.info("Scheduler started")
@@ -325,35 +356,38 @@ class PhotoFrameService:
     def _sync_photos(self):
         """Sync photos from iCloud and convert them."""
         logger.info("Starting iCloud sync...")
-        
-        # Check auth status first
-        status = icloud_sync.check_auth_status()
-        if status == AuthStatus.REQUIRES_2FA:
-            logger.warning("Sync skipped - re-authentication required")
-            self._send_auth_notification()
-            return
-        
-        if status != AuthStatus.AUTHENTICATED:
-            logger.warning(f"Sync skipped - not authenticated: {status.value}")
-            return
-        
-        # Sync photos
-        success, downloaded, message = icloud_sync.sync_photos()
-        
-        if success:
-            logger.info(f"Sync complete: {downloaded} new photos")
-            
-            # Convert new photos
-            if downloaded > 0:
-                converted, errors = image_converter.convert_all_new()
-                logger.info(f"Converted {converted} photos ({errors} errors)")
-            
-            # Cleanup orphaned converted images
-            image_converter.cleanup_orphaned()
-        else:
-            logger.error(f"Sync failed: {message}")
-            if "2FA" in message or "authentication" in message.lower():
+        ram_profiler.log_memory("before_sync")
+        try:
+            # Check auth status first
+            status = icloud_sync.check_auth_status()
+            if status == AuthStatus.REQUIRES_2FA:
+                logger.warning("Sync skipped - re-authentication required")
                 self._send_auth_notification()
+                return
+            
+            if status != AuthStatus.AUTHENTICATED:
+                logger.warning(f"Sync skipped - not authenticated: {status.value}")
+                return
+            
+            # Sync photos
+            success, downloaded, message = icloud_sync.sync_photos()
+            
+            if success:
+                logger.info(f"Sync complete: {downloaded} new photos")
+                
+                # Convert new photos
+                if downloaded > 0:
+                    converted, errors = image_converter.convert_all_new()
+                    logger.info(f"Converted {converted} photos ({errors} errors)")
+                
+                # Cleanup orphaned converted images
+                image_converter.cleanup_orphaned()
+            else:
+                logger.error(f"Sync failed: {message}")
+                if "2FA" in message or "authentication" in message.lower():
+                    self._send_auth_notification()
+        finally:
+            ram_profiler.log_memory("after_sync")
     
     def _on_button_press(self):
         """Handle physical button press."""

@@ -281,6 +281,45 @@
             </div>
         </div>
         
+        <!-- Debug (memory troubleshooting) -->
+        <div class="card settings-section">
+            <div class="card-header">
+                <h3>🔧 Debug</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="margin-bottom: 1rem;">
+                    Log process RAM (RSS) to the log file to help track memory use on low-RAM devices (e.g. Pi Zero 2). Requires a service restart to start/stop the periodic job.
+                </p>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="debug.ram_profiling" 
+                               {% if (config.get('debug') or {}).get('ram_profiling') %}checked{% endif %}>
+                        <span>Enable RAM profiling</span>
+                    </label>
+                    <small class="form-help">Logs process RSS periodically and around sync</small>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Profiling interval (seconds)</label>
+                        <input type="number" name="debug.ram_profiling_interval_seconds" 
+                               value="{{ (config.get('debug') or {}).get('ram_profiling_interval_seconds', 120) }}" 
+                               class="form-input"
+                               min="30" max="3600" step="30">
+                        <small class="form-help">How often to log RAM (e.g. 120 = every 2 min)</small>
+                    </div>
+                    <div class="form-group"></div>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="debug.tracemalloc" 
+                               {% if (config.get('debug') or {}).get('tracemalloc') %}checked{% endif %}>
+                        <span>Enable tracemalloc (allocation tracking)</span>
+                    </label>
+                    <small class="form-help">Adds overhead; use only when debugging. Logs at DEBUG level.</small>
+                </div>
+            </div>
+        </div>
+        
         <div class="form-actions">
             <button type="submit" class="btn btn-primary btn-large">
                 💾 Save Settings

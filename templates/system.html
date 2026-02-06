@@ -2,6 +2,10 @@
 
 {% block title %}System - Photo Frame{% endblock %}
 
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h1>System Management</h1>
@@ -137,6 +141,24 @@
                     </div>
                 </div>
             </form>
+        </div>
+    </div>
+    
+    <!-- 24h Telemetry -->
+    <div class="card card-full-width">
+        <div class="card-header">
+            <h3>📈 24h CPU &amp; Memory</h3>
+            <button class="btn btn-small btn-secondary" onclick="refreshTelemetry()">
+                🔄 Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <div style="position: relative; height: 220px;">
+                <canvas id="telemetryChart"></canvas>
+            </div>
+            <p class="text-muted" style="margin-top: 0.5rem; font-size: 0.875rem;">
+                Samples every 60s. Data older than 24h is discarded.
+            </p>
         </div>
     </div>
     
@@ -302,6 +324,60 @@ async function addWifi(event) {
 
 // Auto-scroll logs to bottom
 document.getElementById('logViewer').scrollTop = document.getElementById('logViewer').scrollHeight;
+
+// 24h telemetry chart
+let telemetryChart = null;
+
+function formatTime(ts) {
+    const d = new Date(ts * 1000);
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+async function refreshTelemetry(silent = false) {
+    try {
+        const response = await fetch('/system/telemetry');
+        const data = await response.json();
+        const cpu = data.cpu || [];
+        const memPct = data.memory_percent || [];
+        const labels = cpu.map(p => formatTime(p[0]));
+        const cpuData = cpu.map(p => p[1]);
+        const memData = memPct.map(p => p[1]);
+        if (telemetryChart) {
+            telemetryChart.data.labels = labels;
+            telemetryChart.data.datasets[0].data = cpuData;
+            telemetryChart.data.datasets[1].data = memData;
+            telemetryChart.update('none');
+        } else {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            telemetryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'CPU %', data: cpuData, borderColor: 'rgb(99, 102, 241)', backgroundColor: 'rgba(99, 102, 241, 0.1)', fill: true, tension: 0.2, yAxisID: 'y' },
+                        { label: 'Memory %', data: memData, borderColor: 'rgb(34, 197, 94)', backgroundColor: 'rgba(34, 197, 94, 0.1)', fill: true, tension: 0.2, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { display: true, title: { display: false }, ticks: { maxTicksLimit: 12 } },
+                        y: { type: 'linear', display: true, position: 'left', min: 0, max: 100, title: { display: true, text: 'CPU %' } },
+                        y1: { type: 'linear', display: true, position: 'right', min: 0, max: 100, title: { display: true, text: 'Memory %' }, grid: { drawOnChartArea: false } }
+                    },
+                    plugins: { legend: { position: 'top' } }
+                }
+            });
+        }
+        if (!silent) showNotification('Telemetry refreshed', 'success');
+    } catch (error) {
+        if (!silent) showNotification('Failed to load telemetry', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => refreshTelemetry(true));
 </script>
 
 <style>
